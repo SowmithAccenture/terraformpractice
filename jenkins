@@ -20,6 +20,7 @@ pipeline {
             steps {
                 script {
                     def gitBash = 'C:\\Program Files\\Git\\bin\\bash.exe'
+                    def terraformPath = 'C:\\terraform\\terraform_1.9.8_windows_amd64\\terraform.exe'
                     bat "\"${gitBash}\" -c 'terraform init'"
                     bat "\"${gitBash}\" -c 'terraform plan -out tfplan'"
                     bat "\"${gitBash}\" -c 'terraform show -no-color tfplan > tfplan.txt'"
@@ -46,6 +47,7 @@ pipeline {
             steps {
                 script {
                     def gitBash = 'C:\\Program Files\\Git\\bin\\bash.exe'
+                    def terraformPath = 'C:\\terraform\\terraform_1.9.8_windows_amd64\\terraform.exe'
                     bat "\"${gitBash}\" -c 'terraform apply -input=false tfplan'"
                 }
             }
