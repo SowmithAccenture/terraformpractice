@@ -1,0 +1,56 @@
+pipeline {
+    parameters {
+        booleanParam(name: 'autoApprove', defaultValue: false, description: 'Automatically run apply after generating plan?')
+    } 
+    environment {
+        AWS_ACCESS_KEY_ID     = credentials('AWS_ACCESS_KEY_ID')
+        AWS_SECRET_ACCESS_KEY = credentials('AWS_SECRET_ACCESS_KEY')
+    }
+
+    agent any
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm  // This automatically handles git checkout.
+            }
+        }
+
+        stage('Plan') {
+            steps {
+                script {
+                    def gitBash = 'C:\\Program Files\\Git\\bin\\bash.exe'
+                    def terraformPath = '/c/terraform/terraform_1.9.8_windows_amd64/terraform.exe'  // Use Unix-style path
+                    bat "\"${gitBash}\" -c '${terraformPath} init'"
+                    bat "\"${gitBash}\" -c '${terraformPath} plan -out tfplan'"
+                    bat "\"${gitBash}\" -c '${terraformPath} show -no-color tfplan > tfplan.txt'"
+                }
+            }
+        }
+
+        stage('Approval') {
+            when {
+                not {
+                    equals expected: true, actual: params.autoApprove
+                }
+            }
+            steps {
+                script {
+                    def plan = readFile 'terraform/tfplan.txt'
+                    input message: "Do you want to apply the plan?",
+                    parameters: [text(name: 'Plan', description: 'Please review the plan', defaultValue: plan)]
+                }
+            }
+        }
+
+        stage('destroy') {
+            steps {
+                script {
+                    def gitBash = 'C:\\Program Files\\Git\\bin\\bash.exe'
+                    def terraformPath = '/c/terraform/terraform_1.9.8_windows_amd64/terraform.exe'  // Use Unix-style path
+                    bat "\"${gitBash}\" -c '${terraformPath} destory -input=false tfplan'"
+                }
+            }
+        }
+    }
+}
