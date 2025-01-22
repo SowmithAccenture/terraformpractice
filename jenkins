@@ -10,16 +10,11 @@ pipeline {
 
    agent  any
     stages {
-        stage('checkout') {
+        stage('Checkout') {
             steps {
-                 script{
-                        dir("terraform")
-                        {
-                           git branch: 'main', git "https://github.com/SowmithAccenture/terraformpractice.git"
-                        }
-                    }
-                }
+                checkout scm  // This automatically handles git checkout.
             }
+        }
 
         stage('Plan') {
             steps {
