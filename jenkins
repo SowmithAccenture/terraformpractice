@@ -18,9 +18,9 @@ pipeline {
 
         stage('Plan') {
             steps {
-                bat 'terraform init'
-                bat 'terraform plan -out tfplan'
-                bat 'terraform show -no-color tfplan > tfplan.txt'
+                sh 'terraform init'
+                sh 'terraform plan -out tfplan'
+                sh 'terraform show -no-color tfplan > tfplan.txt'
             }
         }
         stage('Approval') {
@@ -41,7 +41,7 @@ pipeline {
 
         stage('Apply') {
             steps {
-                bat 'terraform apply -input=false tfplan'
+                sh 'terraform apply -input=false tfplan'
             }
         }
     }
