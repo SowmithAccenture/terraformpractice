@@ -48,7 +48,7 @@ pipeline {
                 script {
                     def gitBash = 'C:\\Program Files\\Git\\bin\\bash.exe'
                     def terraformPath = '/c/terraform/terraform_1.9.8_windows_amd64/terraform.exe'  // Use Unix-style path
-                    bat "\"${gitBash}\" -c '${terraformPath} destory -input=false tfplan'"
+                    bat "\"${gitBash}\" -c '${terraformPath} destroy -input=false tfplan'"
                 }
             }
         }
