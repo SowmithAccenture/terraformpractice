@@ -18,9 +18,10 @@ pipeline {
 
         stage('Plan') {
             steps {
-                powershell 'terraform init'
-                powershell 'terraform plan -out tfplan'
-                powershell 'terraform show -no-color tfplan > tfplan.txt'
+                def gitBash = 'C:\\Program Files\\Git\\bin\\bash.exe'
+                bat "\"${gitBash}\" -c 'terraform init'"
+                bat "\"${gitBash}\" -c 'terraform plan -out tfplan'"
+                bat "\"${gitBash}\" -c 'terraform show -no-color tfplan > tfplan.txt'"
             }
         }
         stage('Approval') {
@@ -41,7 +42,8 @@ pipeline {
 
         stage('Apply') {
             steps {
-                powershell 'terraform apply -input=false tfplan'
+                def gitBash = 'C:\\Program Files\\Git\\bin\\bash.exe'
+                bat "\"${gitBash}\" -c 'terraform apply -input=false tfplan'"
             }
         }
     }
