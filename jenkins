@@ -10,18 +10,19 @@ pipeline {
                 checkout scm  // Checkout your git repository
             }
         }
-
         stage('Init') {
-            steps {
-                script {
-                    def gitBash = 'C:\\Program Files\\Git\\bin\\bash.exe'
-                    def terraformPath = '/c/terraform/terraform_1.9.8_windows_amd64/terraform.exe'
-                    
-                    // Initialize Terraform with backend config
-                    bat "\"${gitBash}\" -c '${terraformPath} init -backend-config=\"bucket=my-terraform-state-bucket-425\" -backend-config=\"key=terraform.tfstate\" -backend-config=\"region=us-east-1\" -input=false'"
-                }
+        steps {
+            script {
+                def gitBash = 'C:\\Program Files\\Git\\bin\\bash.exe'
+                def terraformPath = '/c/terraform/terraform_1.9.8_windows_amd64/terraform.exe'
+                
+                // Initialize Terraform with the S3 backend config
+                bat "\"${gitBash}\" -c '${terraformPath} init -backend-config=\"bucket=my-terraform-state-bucket-425\" -backend-config=\"key=terraform.tfstate\" -backend-config=\"region=us-east-1\" -input=false'"
             }
         }
+    }
+
+
 
         stage('Plan') {
             steps {
