@@ -1,50 +1,12 @@
-# Define AWS Provider
+# Provider Configuration
 provider "aws" {
   region = var.aws_region
-}
-
-# Create S3 Bucket for storing Terraform state
-resource "aws_s3_bucket" "terraform_state" {
-  bucket = "my-terraform-state-bucket"  # Choose a globally unique name for your bucket
-}
-
-# Block public access for the S3 bucket
-resource "aws_s3_bucket_public_access_block" "terraform_state_block" {
-  bucket = aws_s3_bucket.terraform_state.bucket
-
-  block_public_acls       = true
-  ignore_public_acls      = true
-  block_public_policy     = true
-  restrict_public_buckets = true
-}
-
-
-# Define DynamoDB Table for State Locking (optional but recommended for concurrency control)
-resource "aws_dynamodb_table" "terraform_lock" {
-  name           = "terraform-lock"
-  billing_mode   = "PAY_PER_REQUEST"
-  hash_key       = "LockID"
-  attribute {
-    name = "LockID"
-    type = "S"
-  }
-}
-
-# Configure the backend to use the S3 bucket and DynamoDB table
-terraform {
-  backend "s3" {
-    bucket         = aws_s3_bucket.terraform_state.bucket
-    key            = "terraform.tfstate"
-    region         = var.aws_region
-    encrypt        = true
-    dynamodb_table = aws_dynamodb_table.terraform_lock.name
-  }
 }
 
 # Common Configuration for Instances
 resource "aws_instance" "vm" {
   count         = length(var.environments)
-  ami           = var.ami_id
+  ami           = var.ami_id                     # Replace with a valid AMI ID
   instance_type = var.instance_type
 
   tags = {

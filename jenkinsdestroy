@@ -11,22 +11,21 @@ pipeline {
             }
         }
 
-        stage('Init') {
-            steps {
-                script {
-                    def gitBash = 'C:\\Program Files\\Git\\bin\\bash.exe'
-                    def terraformPath = '/c/terraform/terraform_1.9.8_windows_amd64/terraform.exe'
-                    bat "\"${gitBash}\" -c '${terraformPath} init -backend-config=bucket=my-terraform-state-bucket -backend-config=key=terraform.tfstate -backend-config=region=us-east-1'"
-                }
-            }
-        }
-
         stage('Destroy') {
             steps {
                 script {
                     def gitBash = 'C:\\Program Files\\Git\\bin\\bash.exe'
                     def terraformPath = '/c/terraform/terraform_1.9.8_windows_amd64/terraform.exe'
-                    bat "\"${gitBash}\" -c '${terraformPath} destroy -input=false -auto-approve'"
+                    bat "\"${gitBash}\" -c '${terraformPath} init' -backend-config=backend.tf"
+                    bat "\"${gitBash}\" -c '${terraformPath} destroy -auto-approve' -backend-config=backend.tf"
+                }
+            }
+        }
+
+        stage('Store State') {
+            steps {
+                script {
+                    archiveArtifacts artifacts: '**/terraform.tfstate', allowEmptyArchive: true
                 }
             }
         }

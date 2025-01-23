@@ -11,22 +11,13 @@ pipeline {
             }
         }
 
-        stage('Init') {
-            steps {
-                script {
-                    def gitBash = 'C:\\Program Files\\Git\\bin\\bash.exe'
-                    def terraformPath = '/c/terraform/terraform_1.9.8_windows_amd64/terraform.exe'
-                    bat "\"${gitBash}\" -c '${terraformPath} init -backend-config=bucket=my-terraform-state-bucket -backend-config=key=terraform.tfstate -backend-config=region=us-east-1'"
-                }
-            }
-        }
-
         stage('Plan') {
             steps {
                 script {
                     def gitBash = 'C:\\Program Files\\Git\\bin\\bash.exe'
                     def terraformPath = '/c/terraform/terraform_1.9.8_windows_amd64/terraform.exe'
-                    bat "\"${gitBash}\" -c '${terraformPath} plan -out tfplan'"
+                    bat "\"${gitBash}\" -c '${terraformPath} init' -backend-config=backend.tf"
+                    bat "\"${gitBash}\" -c '${terraformPath} plan -out tfplan' -backend-config=backend.tf"
                     bat "\"${gitBash}\" -c '${terraformPath} show -no-color tfplan > tfplan.txt'"
                 }
             }
@@ -52,7 +43,7 @@ pipeline {
                 script {
                     def gitBash = 'C:\\Program Files\\Git\\bin\\bash.exe'
                     def terraformPath = '/c/terraform/terraform_1.9.8_windows_amd64/terraform.exe'
-                    bat "\"${gitBash}\" -c '${terraformPath} apply -input=false tfplan'"
+                    bat "\"${gitBash}\" -c '${terraformPath} apply -input=false tfplan' -backend-config=backend.tf"
                 }
             }
         }
@@ -60,7 +51,6 @@ pipeline {
         stage('Store State') {
             steps {
                 script {
-                    // Persist the terraform state (it should be stored in the S3 bucket automatically)
                     archiveArtifacts artifacts: '**/terraform.tfstate', allowEmptyArchive: true
                 }
             }
