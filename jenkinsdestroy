@@ -11,13 +11,12 @@ pipeline {
             }
         }
 
-        stage('Restore State') {
+        stage('Init') {
             steps {
                 script {
-                    // Restore the terraform state file from the previous job (or artifact storage)
-                    // Make sure to copy the state file to the appropriate directory
-                    // Example: Copy from Jenkins artifact storage or remote state location
-                    copyArtifacts projectName: 'terraform-apply', filter: '**/terraform.tfstate', target: '.'
+                    def gitBash = 'C:\\Program Files\\Git\\bin\\bash.exe'
+                    def terraformPath = '/c/terraform/terraform_1.9.8_windows_amd64/terraform.exe'
+                    bat "\"${gitBash}\" -c '${terraformPath} init -backend-config=bucket=my-terraform-state-bucket -backend-config=key=terraform.tfstate -backend-config=region=us-east-1'"
                 }
             }
         }
@@ -27,7 +26,6 @@ pipeline {
                 script {
                     def gitBash = 'C:\\Program Files\\Git\\bin\\bash.exe'
                     def terraformPath = '/c/terraform/terraform_1.9.8_windows_amd64/terraform.exe'
-                    // Run terraform destroy using the same state file that was created in Job 1
                     bat "\"${gitBash}\" -c '${terraformPath} destroy -input=false -auto-approve'"
                 }
             }
