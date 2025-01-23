@@ -1,18 +1,13 @@
 pipeline {
-    parameters {
-        booleanParam(name: 'autoApprove', defaultValue: false, description: 'Automatically run apply after generating plan?')
-    } 
+    agent any
     environment {
         AWS_ACCESS_KEY_ID     = credentials('AWS_ACCESS_KEY_ID')
         AWS_SECRET_ACCESS_KEY = credentials('AWS_SECRET_ACCESS_KEY')
     }
-
-    agent any
-
     stages {
         stage('Checkout') {
             steps {
-                checkout scm  // This automatically handles git checkout.
+                checkout scm  // Checkout your git repository
             }
         }
 
@@ -20,7 +15,7 @@ pipeline {
             steps {
                 script {
                     def gitBash = 'C:\\Program Files\\Git\\bin\\bash.exe'
-                    def terraformPath = '/c/terraform/terraform_1.9.8_windows_amd64/terraform.exe'  // Use Unix-style path
+                    def terraformPath = '/c/terraform/terraform_1.9.8_windows_amd64/terraform.exe'
                     bat "\"${gitBash}\" -c '${terraformPath} init'"
                     bat "\"${gitBash}\" -c '${terraformPath} plan -out tfplan'"
                     bat "\"${gitBash}\" -c '${terraformPath} show -no-color tfplan > tfplan.txt'"
@@ -47,8 +42,17 @@ pipeline {
             steps {
                 script {
                     def gitBash = 'C:\\Program Files\\Git\\bin\\bash.exe'
-                    def terraformPath = '/c/terraform/terraform_1.9.8_windows_amd64/terraform.exe'  // Use Unix-style path
+                    def terraformPath = '/c/terraform/terraform_1.9.8_windows_amd64/terraform.exe'
                     bat "\"${gitBash}\" -c '${terraformPath} apply -input=false tfplan'"
+                }
+            }
+        }
+
+        stage('Store State') {
+            steps {
+                script {
+                    // Persist the terraform state (if you're using a shared storage or artifact)
+                    archiveArtifacts artifacts: '**/terraform.tfstate', allowEmptyArchive: true
                 }
             }
         }
