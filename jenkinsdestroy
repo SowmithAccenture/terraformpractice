@@ -18,7 +18,7 @@ pipeline {
                     def terraformPath = '/c/terraform/terraform_1.9.8_windows_amd64/terraform.exe'
                     
                     // Initialize Terraform with the backend configuration from backend.tf
-                    bat "\"${gitBash}\" -c '${terraformPath} init -input=false'"
+                    bat "\"${gitBash}\" -c '${terraformPath} init'"
                 }
             }
         }
