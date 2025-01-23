@@ -16,8 +16,14 @@ pipeline {
                 script {
                     def gitBash = 'C:\\Program Files\\Git\\bin\\bash.exe'
                     def terraformPath = '/c/terraform/terraform_1.9.8_windows_amd64/terraform.exe'
-                    bat "\"${gitBash}\" -c '${terraformPath} init' -backend-config=backend.tf -input=false"
-                    bat "\"${gitBash}\" -c '${terraformPath} plan -out tfplan' -backend-config=backend.tf -input=false"
+                    
+                    // Initialize Terraform with backend configuration
+                    bat "\"${gitBash}\" -c '${terraformPath} init -backend-config=backend.tf -input=false'"
+
+                    // Run the plan with the backend configuration
+                    bat "\"${gitBash}\" -c '${terraformPath} plan -out tfplan -input=false'"
+
+                    // Store the plan output in a text file
                     bat "\"${gitBash}\" -c '${terraformPath} show -no-color tfplan > tfplan.txt'"
                 }
             }
@@ -39,19 +45,19 @@ pipeline {
         }
 
         stage('Apply') {
-    steps {
-        script {
-            def gitBash = 'C:\\Program Files\\Git\\bin\\bash.exe'
-            def terraformPath = '/c/terraform/terraform_1.9.8_windows_amd64/terraform.exe'
-            
-            // Initialize Terraform with backend configuration
-            bat "\"${gitBash}\" -c '${terraformPath} init -backend-config=backend.tf -input=false'"
+            steps {
+                script {
+                    def gitBash = 'C:\\Program Files\\Git\\bin\\bash.exe'
+                    def terraformPath = '/c/terraform/terraform_1.9.8_windows_amd64/terraform.exe'
+                    
+                    // Initialize Terraform with backend configuration
+                    bat "\"${gitBash}\" -c '${terraformPath} init -backend-config=backend.tf -input=false'"
 
-            // Apply the Terraform plan (auto-apply without confirmation)
-            bat "\"${gitBash}\" -c '${terraformPath} apply -input=false tfplan'"
+                    // Apply the Terraform plan (auto-apply without confirmation)
+                    bat "\"${gitBash}\" -c '${terraformPath} apply -input=false tfplan'"
 
-            // Optionally store the Terraform state after apply
-            archiveArtifacts artifacts: '**/terraform.tfstate', allowEmptyArchive: true
+                    // Optionally store the Terraform state after apply
+                    archiveArtifacts artifacts: '**/terraform.tfstate', allowEmptyArchive: true
                 }
             }
         }
@@ -59,6 +65,7 @@ pipeline {
         stage('Store State') {
             steps {
                 script {
+                    // Archive the state file after apply
                     archiveArtifacts artifacts: '**/terraform.tfstate', allowEmptyArchive: true
                 }
             }
