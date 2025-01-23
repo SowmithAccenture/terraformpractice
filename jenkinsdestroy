@@ -11,16 +11,24 @@ pipeline {
             }
         }
 
-        stage('Destroy') {
-            steps {
-                script {
-                    def gitBash = 'C:\\Program Files\\Git\\bin\\bash.exe'
-                    def terraformPath = '/c/terraform/terraform_1.9.8_windows_amd64/terraform.exe'
-                    bat "\"${gitBash}\" -c '${terraformPath} init' -backend-config=backend.tf"
-                    bat "\"${gitBash}\" -c '${terraformPath} destroy -auto-approve' -backend-config=backend.tf"
+       stage('Destroy') {
+    steps {
+        script {
+            def gitBash = 'C:\\Program Files\\Git\\bin\\bash.exe'
+            def terraformPath = '/c/terraform/terraform_1.9.8_windows_amd64/terraform.exe'
+            
+            // Initialize Terraform with the backend configuration
+            bat "\"${gitBash}\" -c '${terraformPath} init -backend-config=backend.tf -input=false'"
+
+            // Run Terraform destroy using the same state file to destroy resources
+            bat "\"${gitBash}\" -c '${terraformPath} destroy -input=false -auto-approve'"
+
+            // Optionally, archive the state file after destruction if needed
+            archiveArtifacts artifacts: '**/terraform.tfstate', allowEmptyArchive: true
                 }
             }
         }
+
 
         stage('Store State') {
             steps {
