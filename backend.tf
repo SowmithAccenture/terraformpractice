@@ -1,3 +1,7 @@
 terraform {
-  backend "local" {}  # This backend block is used to clear the warning
+  backend "s3" {
+    bucket = "my-terraform-state-bucket-425"
+    key    = "terraform.tfstate"
+    region = "us-east-1"
+  }
 }
