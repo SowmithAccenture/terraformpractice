@@ -6,8 +6,9 @@ provider "aws" {
 # Common Configuration for Instances
 resource "aws_instance" "vm" {
   count         = length(var.environments)
-  ami           = var.ami_id                     # Replace with a valid AMI ID
+  ami           = var.ami_id
   instance_type = var.instance_type
+  key_name      = var.key_name # Key pair for decrypting the password
 
   tags = {
     Name        = "${var.environments[count.index]}-instance"
@@ -32,7 +33,7 @@ variable "aws_region" {
 
 variable "ami_id" {
   description = "AMI ID for the EC2 instances"
-  default     = "ami-04f77c9cd94746b09" # Replace with your AMI
+  default     = "ami-04f77c9cd94746b09" # Ensure this is a Windows AMI
 }
 
 variable "instance_type" {
@@ -41,7 +42,12 @@ variable "instance_type" {
 }
 
 variable "environments" {
-  description = "List of environments to create (dev, stage, prod)"
+  description = "List of environments to create"
   type        = list(string)
   default     = ["dev1", "stage1", "prod1"]
+}
+
+variable "key_name" {
+  description = "Key pair name for Windows login"
+  default     = "terraformkeypair" # Replace with your key pair name
 }
