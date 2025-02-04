@@ -71,7 +71,7 @@ variable "windows_ami_id" {
 
 variable "linux_ami_id" {
   description = "Amazon Linux AMI ID"
-  default     = "ami-0c55b159cbfafe1f0" # Change to the latest Amazon Linux AMI if needed
+  default     = "ami-0c614dee691cbbf37" # Change to the latest Amazon Linux AMI if needed
 }
 
 variable "instance_type" {
