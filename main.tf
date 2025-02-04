@@ -3,7 +3,7 @@ provider "aws" {
   region = var.aws_region
 }
 
-# Common Configuration for Windows Instances
+# Windows Instances Configuration
 resource "aws_instance" "windows_vm" {
   count         = length(var.environments)
   ami           = var.windows_ami_id
@@ -17,7 +17,7 @@ resource "aws_instance" "windows_vm" {
   }
 }
 
-# Amazon Linux Instance Configuration
+# Amazon Linux Ansible Controller Configuration
 resource "aws_instance" "linux_vm" {
   ami           = var.linux_ami_id
   instance_type = var.instance_type
@@ -28,30 +28,41 @@ resource "aws_instance" "linux_vm" {
     Environment = "ansible"
     OS          = "Linux"
   }
+
+  # Install Ansible automatically on startup
+  user_data = <<EOF
+  #!/bin/bash
+  sudo yum update -y
+  sudo amazon-linux-extras enable ansible2
+  sudo yum install -y ansible
+  ansible --version
+  EOF
 }
 
-# Output the Public IPs of the Instances
-output "instance_public_ips" {
+# Output the Public IPs of the Windows Instances
+output "windows_instance_public_ips" {
   value = {
     for instance in aws_instance.windows_vm :
     instance.tags["Name"] => instance.public_ip
   }
 }
 
+# Output the Public IP of the Linux Ansible Controller
 output "linux_instance_public_ip" {
   value = {
     "ansible-controller" = aws_instance.linux_vm.public_ip
   }
 }
 
-# Output Instance IDs
-output "instance_ids" {
+# Output Instance IDs for Windows VMs
+output "windows_instance_ids" {
   value = {
     for instance in aws_instance.windows_vm :
     instance.tags["Name"] => instance.id
   }
 }
 
+# Output Instance ID for the Linux Ansible Controller
 output "linux_instance_id" {
   value = {
     "ansible-controller" = aws_instance.linux_vm.id
@@ -71,7 +82,7 @@ variable "windows_ami_id" {
 
 variable "linux_ami_id" {
   description = "Amazon Linux AMI ID"
-  default     = "ami-0c614dee691cbbf37" # Change to the latest Amazon Linux AMI if needed
+  default     = "ami-0c614dee691cbbf37" # Update if needed
 }
 
 variable "instance_type" {
@@ -87,7 +98,7 @@ variable "environments" {
 
 variable "windows_key_name" {
   description = "Key pair name for Windows instances"
-  default     = "terraformkeypair" # Replace with your key pair name
+  default     = "terraformkeypair"
 }
 
 variable "linux_key_name" {
