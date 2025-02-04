@@ -33,7 +33,7 @@ resource "aws_instance" "linux_vm" {
 # Output the Public IPs of the Instances
 output "instance_public_ips" {
   value = {
-    for idx, instance in aws_instance.windows_vm :
+    for instance in aws_instance.windows_vm :
     instance.tags["Name"] => instance.public_ip
   }
 }
@@ -47,7 +47,7 @@ output "linux_instance_public_ip" {
 # Output Instance IDs
 output "instance_ids" {
   value = {
-    for idx, instance in aws_instance.windows_vm :
+    for instance in aws_instance.windows_vm :
     instance.tags["Name"] => instance.id
   }
 }
