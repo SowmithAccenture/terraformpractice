@@ -32,7 +32,7 @@ pipeline {
                     def terraformPath = '/c/terraform/terraform_1.9.8_windows_amd64/terraform.exe'
                     
                     if (params.ENVIRONMENT) {
-                        bat "\"${gitBash}\" -c '${terraformPath} destroy -target=aws_instance.${params.ENVIRONMENT}-instance -input=false -auto-approve'"
+                        bat "\"${gitBash}\" -c '${terraformPath} destroy -target=aws_instance.${params.ENVIRONMENT} -input=false -auto-approve'"
                     } else {
                         error "No environment specified! Please provide ENVIRONMENT parameter."
                     }
