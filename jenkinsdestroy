@@ -4,6 +4,9 @@ pipeline {
         AWS_ACCESS_KEY_ID     = credentials('AWS_ACCESS_KEY_ID')
         AWS_SECRET_ACCESS_KEY = credentials('AWS_SECRET_ACCESS_KEY')
     }
+    parameters {
+        string(name: 'ENVIRONMENT', defaultValue: '', description: 'Enter the environment to destroy (e.g., dev, stage, prod)')
+    }
     stages {
         stage('Checkout') {
             steps {
@@ -17,13 +20,10 @@ pipeline {
                     def gitBash = 'C:\\Program Files\\Git\\bin\\bash.exe'
                     def terraformPath = '/c/terraform/terraform_1.9.8_windows_amd64/terraform.exe'
                     
-                    // Initialize Terraform with the backend configuration from backend.tf
                     bat "\"${gitBash}\" -c '${terraformPath} init -force-copy'"
                 }
             }
         }
-
-
 
         stage('Destroy') {
             steps {
@@ -31,11 +31,11 @@ pipeline {
                     def gitBash = 'C:\\Program Files\\Git\\bin\\bash.exe'
                     def terraformPath = '/c/terraform/terraform_1.9.8_windows_amd64/terraform.exe'
                     
-                    // Destroy Terraform-managed resources using the same state file
-                    bat "\"${gitBash}\" -c '${terraformPath} destroy -input=false -auto-approve'"
-                    
-                    // Archive the state
-                    archiveArtifacts artifacts: '**/terraform.tfstate', allowEmptyArchive: true
+                    if (params.ENVIRONMENT) {
+                        bat "\"${gitBash}\" -c '${terraformPath} destroy -target=aws_instance.${params.ENVIRONMENT}-instance -input=false -auto-approve'"
+                    } else {
+                        error "No environment specified! Please provide ENVIRONMENT parameter."
+                    }
                 }
             }
         }
