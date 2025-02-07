@@ -8,6 +8,7 @@ pipeline {
         TF_STATE_KEY = "terraform.tfstate"
         S3_SCRIPT_PATH = "s3://my-terraform-state-bucket-425"
         ADMIN_USERNAME = "Administrator"
+        GIT_BASH = "C:\\Program Files\\Git\\bin\\bash.exe"
     }
 
     stages {
