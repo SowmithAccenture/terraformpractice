@@ -44,7 +44,7 @@ pipeline {
                     echo "Downloading PowerShell scripts from S3"
 
                     bat "\"${GIT_BASH}\" -c 'AWS_ACCESS_KEY_ID=${env.AWS_ACCESS_KEY_ID} AWS_SECRET_ACCESS_KEY=${env.AWS_SECRET_ACCESS_KEY} aws s3 cp s3://${S3_BUCKET}/ConfigureRemotingForAnsible.ps1 .'"
-                    bat "\"${GIT_BASH}\" -c 'AWS_ACCESS_KEY_ID=${env.AWS_ACCESS_KEY_ID} AWS_SECRET_ACCESS_KEY=${env.AWS_SECRET_ACCESS_KEY} aws s3 cp s3://${S3_BUCKET}/create_user.ps1 .'"
+                    bat "\"${GIT_BASH}\" -c 'AWS_ACCESS_KEY_ID=${env.AWS_ACCESS_KEY_ID} AWS_SECRET_ACCESS_KEY=${env.AWS_SECRET_ACCESS_KEY} aws s3 cp s3://${S3_BUCKET}/Create_user.ps1 .'"
                     
                     echo "Scripts downloaded successfully"
                 }
@@ -61,7 +61,7 @@ pipeline {
                         
                         // Attempt SCP transfer, throw error if it fails
                         def result = bat(script: """
-                            scp -i ${SSH_PRIVATE_KEY} -o StrictHostKeyChecking=no ConfigureRemotingForAnsible.ps1 create_user.ps1 Administrator@${ip}:C:\\Windows\\Temp\\
+                            scp -i ${SSH_PRIVATE_KEY} -o StrictHostKeyChecking=no ConfigureRemotingForAnsible.ps1 Create_user.ps1 Administrator@${ip}:C:\\Windows\\Temp\\
                         """, returnStatus: true)
 
                         if (result != 0) {
@@ -83,7 +83,7 @@ pipeline {
                         echo "Executing scripts on: ${ip}"
 
                         def result = bat(script: """
-                            ssh -i ${SSH_PRIVATE_KEY} -o StrictHostKeyChecking=no Administrator@${ip} "powershell -ExecutionPolicy Bypass -File C:\\Windows\\Temp\\ConfigureRemotingForAnsible.ps1; C:\\Windows\\Temp\\create_user.ps1"
+                            ssh -i ${SSH_PRIVATE_KEY} -o StrictHostKeyChecking=no Administrator@${ip} "powershell -ExecutionPolicy Bypass -File C:\\Windows\\Temp\\ConfigureRemotingForAnsible.ps1; C:\\Windows\\Temp\\Create_user.ps1"
                         """, returnStatus: true)
 
                         if (result != 0) {
