@@ -12,10 +12,10 @@ pipeline {
             steps {
                 script {
                     echo "Fetching Windows VM IPs from Terraform State..."
-                    def jsonOutput = sh(script: """
-                        aws s3 cp s3://$S3_BUCKET/terraform.tfstate terraform.tfstate --quiet
-                        cat terraform.tfstate | jq -r '.resources[] | select(.type=="aws_instance") | .instances[] | select(.attributes.platform=="windows") | .attributes.public_ip'
-                    """, returnStdout: true).trim()
+                    def jsonOutput = sh(script: '''
+                        aws s3 cp s3://my-terraform-state-bucket-425/terraform.tfstate terraform.tfstate --quiet
+                        cat terraform.tfstate | jq -r ".resources[] | select(.type==\\"aws_instance\\") | .instances[] | select(.attributes.platform==\\"windows\\") | .attributes.public_ip"
+                    ''', returnStdout: true).trim()
                     
                     if (jsonOutput) {
                         env.WINDOWS_IPS = jsonOutput.split("\n").join(" ")
@@ -32,7 +32,7 @@ pipeline {
                 script {
                     echo "Decrypting Windows Administrator Password..."
                     def decryptedPass = sh(script: """
-                        aws ec2 get-password-data --instance-id $(cat terraform.tfstate | jq -r '.resources[] | select(.type=="aws_instance") | .instances[] | select(.attributes.platform=="windows") | .attributes.id') --priv-key $PEM_FILE --query 'PasswordData' --output text
+                        aws ec2 get-password-data --instance-id \$(cat terraform.tfstate | jq -r '.resources[] | select(.type=="aws_instance") | .instances[] | select(.attributes.platform=="windows") | .attributes.id') --priv-key $PEM_FILE --query 'PasswordData' --output text
                     """, returnStdout: true).trim()
                     
                     if (decryptedPass) {
