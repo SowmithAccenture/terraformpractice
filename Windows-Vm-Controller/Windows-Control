@@ -6,65 +6,56 @@ pipeline {
         TF_STATE_KEY = "terraform.tfstate"
         AWS_ACCESS_KEY_ID = credentials('AWS_ACCESS_KEY_ID')
         AWS_SECRET_ACCESS_KEY = credentials('AWS_SECRET_ACCESS_KEY')
+        PEM_FILE = "C:/path/to/terraformkeypair.pem"
         WINDOWS_USER = "Administrator"
-        PRIVATE_KEY = "C:/Ansible-keys/terraformkeypair.pem"
-        SCRIPT_DEST = "C:/Scripts"
-        REPO_URL = "https://github.com/SowmithAccenture/terraformpractice.git"
-        BRANCH = "main"
     }
 
     stages {
         stage('Get Windows Instance IPs from Terraform State') {
             steps {
                 script {
-                    // Fetch the latest terraform state from S3
                     bat "\"C:\\Program Files\\Git\\bin\\bash.exe\" -c 'AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} aws s3 cp s3://${TF_STATE_BUCKET}/${TF_STATE_KEY} terraform.tfstate'"
 
-                    // Extract Windows instance IPs from the terraform state file
                     def windowsIPs = powershell(returnStdout: true, script: """
                         \$tfState = Get-Content terraform.tfstate -Raw | ConvertFrom-Json
                         \$windowsIPs = \$tfState.resources | Where-Object { \$_.'type' -eq 'aws_instance' } | ForEach-Object { \$_.'instances' } | ForEach-Object { \$_[0].'attributes'.'public_ip' }
                         \$windowsIPs -join ', '
                     """).trim()
 
-                    echo "Extracted Windows VM IPs: ${windowsIPs}"
+                    echo "Windows Instance IPs: ${windowsIPs}"
                     env.WINDOWS_IPS = windowsIPs
                 }
             }
         }
 
-        stage('Clone Repository') {
+        stage('Copy PowerShell Scripts to Windows VMs') {
             steps {
                 script {
-                    def gitBash = 'C:\\Program Files\\Git\\bin\\bash.exe'
-                    def repoURL = 'https://github.com/SowmithAccenture/terraformpractice.git'
-                    def branch = 'main'
-
-                    bat "\"${gitBash}\" -c 'rm -rf terraformpractice && git clone --single-branch -b ${branch} ${repoURL}'"
-                }
-            }
-        }
-
-        stage('Copy Scripts to Windows VMs') {
-            steps {
-                script {
-                    def windowsIPList = env.WINDOWS_IPS.split(', ')
-                    windowsIPList.each { ip ->
+                    def ipList = env.WINDOWS_IPS.split(', ')
+                    for (ip in ipList) {
                         bat """
-                            scp -i ${PRIVATE_KEY} -o StrictHostKeyChecking=no -r Windows-Vm-Controller ${WINDOWS_USER}@${ip}:${SCRIPT_DEST}
+                            scp -i ${PEM_FILE} -o StrictHostKeyChecking=no ^
+                            "s3://${TF_STATE_BUCKET}/ConfigureRemotingForAnsible.ps1" ${WINDOWS_USER}@${ip}:C:\\Windows\\Temp\\ConfigureRemotingForAnsible.ps1
+                            
+                            scp -i ${PEM_FILE} -o StrictHostKeyChecking=no ^
+                            "s3://${TF_STATE_BUCKET}/create_user.ps1" ${WINDOWS_USER}@${ip}:C:\\Windows\\Temp\\create_user.ps1
                         """
                     }
                 }
             }
         }
 
-        stage('Execute PowerShell Script on Windows VMs') {
+        stage('Execute PowerShell Scripts on Windows VMs') {
             steps {
                 script {
-                    def windowsIPList = env.WINDOWS_IPS.split(', ')
-                    windowsIPList.each { ip ->
+                    def ipList = env.WINDOWS_IPS.split(', ')
+                    for (ip in ipList) {
                         bat """
-                            ssh -i ${PRIVATE_KEY} -o StrictHostKeyChecking=no ${WINDOWS_USER}@${ip} "powershell.exe -ExecutionPolicy Bypass -File ${SCRIPT_DEST}/create_user.ps1"
+                            ssh -i ${PEM_FILE} -o StrictHostKeyChecking=no ${WINDOWS_USER}@${ip} ^
+                            "powershell -ExecutionPolicy Bypass -File C:\\Windows\\Temp\\ConfigureRemotingForAnsible.ps1"
+
+                            ssh -i ${PEM_FILE} -o StrictHostKeyChecking=no ${WINDOWS_USER}@${ip} ^
+                            "powershell -ExecutionPolicy Bypass -File C:\\Windows\\Temp\\create_user.ps1"
                         """
                     }
                 }
