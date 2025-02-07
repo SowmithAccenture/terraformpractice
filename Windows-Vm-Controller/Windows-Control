@@ -40,7 +40,7 @@ pipeline {
                     echo "Downloading PowerShell scripts from S3"
 
                     bat "\"${GIT_BASH}\" -c 'AWS_ACCESS_KEY_ID=${env.AWS_ACCESS_KEY_ID} AWS_SECRET_ACCESS_KEY=${env.AWS_SECRET_ACCESS_KEY} aws s3 cp s3://${S3_BUCKET}/ConfigureRemotingForAnsible.ps1 .'"
-                    bat "\"${GIT_BASH}\" -c 'AWS_ACCESS_KEY_ID=${env.AWS_ACCESS_KEY_ID} AWS_SECRET_ACCESS_KEY=${env.AWS_SECRET_ACCESS_KEY} aws s3 cp s3://${S3_BUCKET}/create_user.ps1 .'"
+                    bat "\"${GIT_BASH}\" -c 'AWS_ACCESS_KEY_ID=${env.AWS_ACCESS_KEY_ID} AWS_SECRET_ACCESS_KEY=${env.AWS_SECRET_ACCESS_KEY} aws s3 cp s3://${S3_BUCKET}/Create_user.ps1 .'"
                     
                     echo "Scripts downloaded successfully"
                 }
