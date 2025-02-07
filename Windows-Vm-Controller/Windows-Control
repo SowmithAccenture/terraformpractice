@@ -5,31 +5,34 @@ pipeline {
         TERRAFORM_S3_BUCKET = "my-terraform-state-bucket-425"
         TERRAFORM_S3_KEY = "terraform.tfstate"
         WINDOWS_USER = "Administrator"
-        PRIVATE_KEY = "/var/lib/jenkins/.ssh/terraformkeypair.pem"  // Update this with your .pem file path
+        PRIVATE_KEY = "C:/Ansible-keys/terraformkeypair.pem"  // Update this with your .pem file path
         SCRIPT_DEST = "C:/Scripts"  // Destination folder on Windows VMs
         REPO_URL = "https://github.com/SowmithAccenture/terraformpractice.git"
         BRANCH = "main"
     }
 
     stages {
-        stage('Fetch Windows VM IPs') {
+        stage('Get Windows Instance IPs from Terraform State') {
             steps {
                 script {
-                    // Download Terraform state file from S3
-                    sh """
-                        aws s3 cp s3://$TERRAFORM_S3_BUCKET/$TERRAFORM_S3_KEY terraform.tfstate
-                    """
+                    // Fetch latest Terraform state from S3
+                    bat "\"C:\\Program Files\\Git\\bin\\bash.exe\" -c 'AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} aws s3 cp s3://${TF_STATE_BUCKET}/${TF_STATE_KEY} terraform.tfstate'"
 
-                    // Extract Windows VM IPs dynamically using jq
-                    def ipList = sh(script: """
-                        cat terraform.tfstate | jq -r '.resources[] | select(.type=="aws_instance") | select(.name | test("dev|stage|prod")) | .instances[].attributes.public_ip'
-                    """, returnStdout: true).trim().split("\n")
+                    // Extract Windows VM IPs using PowerShell
+                    def windowsIPs = powershell(returnStdout: true, script: """
+                        \$tfState = Get-Content terraform.tfstate -Raw | ConvertFrom-Json
+                        \$windowsIPs = \$tfState.resources | Where-Object { \$_.'type' -eq 'aws_instance' } | ForEach-Object { \$_.'instances' } | ForEach-Object { \$_[0].'attributes'.'public_ip' }
+                        \$windowsIPs -join ', '
+                    """).trim()
 
-                    echo "Extracted Windows VM IPs: ${ipList}"
-                    env.WINDOWS_IPS = ipList.join(",")  // Store IPs as a comma-separated string
+                    echo "Extracted Windows VM IPs: ${windowsIPs}"
+
+                    // Store IPs as an environment variable
+                    env.WINDOWS_IPS = windowsIPs
                 }
             }
         }
+
 
         stage('Checkout Git Repository') {
             steps {
