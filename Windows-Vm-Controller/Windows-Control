@@ -2,25 +2,25 @@ pipeline {
     agent any
 
     environment {
-        TERRAFORM_S3_BUCKET = "my-terraform-state-bucket-425"
-        TERRAFORM_S3_KEY = "terraform.tfstate"
+        TF_STATE_BUCKET = "my-terraform-state-bucket-425"
+        TF_STATE_KEY = "terraform.tfstate"
+        AWS_ACCESS_KEY_ID = credentials('AWS_ACCESS_KEY_ID')
+        AWS_SECRET_ACCESS_KEY = credentials('AWS_SECRET_ACCESS_KEY')
         WINDOWS_USER = "Administrator"
-        PRIVATE_KEY = "C:/Ansible-keys/terraformkeypair.pem"  // Update this with your .pem file path
-        SCRIPT_DEST = "C:/Scripts"  // Destination folder on Windows VMs
+        PRIVATE_KEY = "C:/Ansible-keys/terraformkeypair.pem"
+        SCRIPT_DEST = "C:/Scripts"
         REPO_URL = "https://github.com/SowmithAccenture/terraformpractice.git"
         BRANCH = "main"
-        AWS_ACCESS_KEY_ID     = credentials('AWS_ACCESS_KEY_ID')
-        AWS_SECRET_ACCESS_KEY = credentials('AWS_SECRET_ACCESS_KEY')
     }
 
     stages {
         stage('Get Windows Instance IPs from Terraform State') {
             steps {
                 script {
-                    // Fetch latest Terraform state from S3
+                    // Fetch the latest terraform state from S3
                     bat "\"C:\\Program Files\\Git\\bin\\bash.exe\" -c 'AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} aws s3 cp s3://${TF_STATE_BUCKET}/${TF_STATE_KEY} terraform.tfstate'"
 
-                    // Extract Windows VM IPs using PowerShell
+                    // Extract Windows instance IPs from the terraform state file
                     def windowsIPs = powershell(returnStdout: true, script: """
                         \$tfState = Get-Content terraform.tfstate -Raw | ConvertFrom-Json
                         \$windowsIPs = \$tfState.resources | Where-Object { \$_.'type' -eq 'aws_instance' } | ForEach-Object { \$_.'instances' } | ForEach-Object { \$_[0].'attributes'.'public_ip' }
@@ -28,18 +28,15 @@ pipeline {
                     """).trim()
 
                     echo "Extracted Windows VM IPs: ${windowsIPs}"
-
-                    // Store IPs as an environment variable
                     env.WINDOWS_IPS = windowsIPs
                 }
             }
         }
 
-
-        stage('Checkout Git Repository') {
+        stage('Clone PowerShell Scripts from GitHub') {
             steps {
                 script {
-                    git branch: "${BRANCH}", url: "${REPO_URL}"
+                    bat "\"C:\\Program Files\\Git\\bin\\bash.exe\" -c 'rm -rf Windows-Vm-Controller && git clone -b ${BRANCH} ${REPO_URL} --depth 1'"
                 }
             }
         }
@@ -47,31 +44,23 @@ pipeline {
         stage('Copy Scripts to Windows VMs') {
             steps {
                 script {
-                    def windowsIPs = env.WINDOWS_IPS.split(",")
-
-                    windowsIPs.each { ip ->
-                        sh """
-                            scp -i ${PRIVATE_KEY} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null Windows-Vm-Controller/*.ps1 Administrator@${ip}:"C:\\Scripts\\"
+                    def windowsIPList = env.WINDOWS_IPS.split(', ')
+                    windowsIPList.each { ip ->
+                        bat """
+                            scp -i ${PRIVATE_KEY} -o StrictHostKeyChecking=no -r Windows-Vm-Controller ${WINDOWS_USER}@${ip}:${SCRIPT_DEST}
                         """
                     }
                 }
             }
         }
 
-        stage('Execute Scripts on Windows VMs') {
+        stage('Execute PowerShell Script on Windows VMs') {
             steps {
                 script {
-                    def windowsIPs = env.WINDOWS_IPS.split(",")
-
-                    windowsIPs.each { ip ->
-                        // Execute create_user.ps1
-                        sh """
-                            ssh -i ${PRIVATE_KEY} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null Administrator@${ip} "powershell -ExecutionPolicy Bypass -File C:\\Scripts\\create_user.ps1"
-                        """
-
-                        // Execute another script (modify if needed)
-                        sh """
-                            ssh -i ${PRIVATE_KEY} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null Administrator@${ip} "powershell -ExecutionPolicy Bypass -File C:\\Scripts\\another_script.ps1"
+                    def windowsIPList = env.WINDOWS_IPS.split(', ')
+                    windowsIPList.each { ip ->
+                        bat """
+                            ssh -i ${PRIVATE_KEY} -o StrictHostKeyChecking=no ${WINDOWS_USER}@${ip} "powershell.exe -ExecutionPolicy Bypass -File ${SCRIPT_DEST}/create_user.ps1"
                         """
                     }
                 }
