@@ -45,12 +45,12 @@ pipeline {
             }
         }
 
-        stage('Install pip and pywinrm') {
+        stage('Install Python and Pip') {
             steps {
                 script {
                     bat """
                         plink -i ${PPK_FILE} ${ANSIBLE_USER}@${ANSIBLE_HOST} ^
-                        "sudo yum install -y pip && pip install --upgrade --force-reinstall pip==9.0.3 && pip install pywinrm"
+                        "sudo yum install -y python3 && sudo alternatives --set python /usr/bin/python3 && sudo python3 -m pip install --upgrade pip"
                     """
                 }
             }
