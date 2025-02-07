@@ -32,7 +32,7 @@ pipeline {
             steps {
                 bat """
                     aws s3 cp s3://${TF_STATE_BUCKET}/ConfigureRemotingForAnsible.ps1 .
-                    aws s3 cp s3://${TF_STATE_BUCKET}/create_user.ps1 .
+                    aws s3 cp s3://${TF_STATE_BUCKET}/Create_user.ps1 .
                 """
             }
         }
