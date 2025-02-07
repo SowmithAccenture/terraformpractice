@@ -33,10 +33,14 @@ pipeline {
             }
         }
 
-        stage('Clone PowerShell Scripts from GitHub') {
+        stage('Clone Repository') {
             steps {
                 script {
-                    bat "\"C:\\Program Files\\Git\\bin\\bash.exe\" -c 'rm -rf terraformpractice && git clone --single-branch -b ${BRANCH} ${REPO_URL}'"
+                    def gitBash = 'C:\\Program Files\\Git\\bin\\bash.exe'
+                    def repoURL = 'https://github.com/SowmithAccenture/terraformpractice.git'
+                    def branch = 'main'
+
+                    bat "\"${gitBash}\" -c 'rm -rf terraformpractice && git clone --single-branch -b ${branch} ${repoURL}'"
                 }
             }
         }
