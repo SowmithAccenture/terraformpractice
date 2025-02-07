@@ -36,7 +36,7 @@ pipeline {
         stage('Clone PowerShell Scripts from GitHub') {
             steps {
                 script {
-                    bat "\"C:\\Program Files\\Git\\bin\\bash.exe\" -c 'rm -rf Windows-Vm-Controller && git clone -b ${BRANCH} ${REPO_URL} --depth 1'"
+                    bat "\"C:\\Program Files\\Git\\bin\\bash.exe\" -c 'rm -rf terraformpractice && git clone --single-branch -b ${BRANCH} ${REPO_URL}'"
                 }
             }
         }
