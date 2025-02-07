@@ -45,6 +45,17 @@ pipeline {
             }
         }
 
+        stage('Install pip and pywinrm') {
+            steps {
+                script {
+                    bat """
+                        plink -i ${PPK_FILE} ${ANSIBLE_USER}@${ANSIBLE_HOST} ^
+                        "sudo yum install -y pip && pip install --upgrade --force-reinstall pip==9.0.3 && pip install pywinrm"
+                    """
+                }
+            }
+        }
+
         stage('Get Windows Instance IPs from Terraform State') {
             steps {
                 script {
