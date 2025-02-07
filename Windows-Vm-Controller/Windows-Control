@@ -11,7 +11,7 @@ pipeline {
     }
 
     stages {
-        stage('Get Windows Instance IPs from Terraform State') {
+        stage('Fetch Windows VM IPs') {
             steps {
                 script {
                     bat "\"C:\\Program Files\\Git\\bin\\bash.exe\" -c 'AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} aws s3 cp s3://${TF_STATE_BUCKET}/${TF_STATE_KEY} terraform.tfstate'"
@@ -28,24 +28,30 @@ pipeline {
             }
         }
 
-        stage('Copy PowerShell Scripts to Windows VMs') {
+        stage('Download Scripts from S3') {
+            steps {
+                bat """
+                    aws s3 cp s3://${TF_STATE_BUCKET}/ConfigureRemotingForAnsible.ps1 .
+                    aws s3 cp s3://${TF_STATE_BUCKET}/create_user.ps1 .
+                """
+            }
+        }
+
+        stage('Transfer Scripts to Windows VMs') {
             steps {
                 script {
                     def ipList = env.WINDOWS_IPS.split(', ')
                     for (ip in ipList) {
                         bat """
-                            scp -i ${PEM_FILE} -o StrictHostKeyChecking=no ^
-                            "s3://${TF_STATE_BUCKET}/ConfigureRemotingForAnsible.ps1" ${WINDOWS_USER}@${ip}:C:\\Windows\\Temp\\ConfigureRemotingForAnsible.ps1
-                            
-                            scp -i ${PEM_FILE} -o StrictHostKeyChecking=no ^
-                            "s3://${TF_STATE_BUCKET}/create_user.ps1" ${WINDOWS_USER}@${ip}:C:\\Windows\\Temp\\create_user.ps1
+                            scp -i ${PEM_FILE} -o StrictHostKeyChecking=no ConfigureRemotingForAnsible.ps1 ${WINDOWS_USER}@${ip}:C:\\Windows\\Temp\\
+                            scp -i ${PEM_FILE} -o StrictHostKeyChecking=no create_user.ps1 ${WINDOWS_USER}@${ip}:C:\\Windows\\Temp\\
                         """
                     }
                 }
             }
         }
 
-        stage('Execute PowerShell Scripts on Windows VMs') {
+        stage('Execute Scripts on Windows VMs') {
             steps {
                 script {
                     def ipList = env.WINDOWS_IPS.split(', ')
