@@ -2,27 +2,33 @@ pipeline {
     agent any
 
     environment {
-        TF_STATE_BUCKET = "my-terraform-state-bucket-425"
-        TF_STATE_KEY = "terraform.tfstate"
         AWS_ACCESS_KEY_ID = credentials('AWS_ACCESS_KEY_ID')
         AWS_SECRET_ACCESS_KEY = credentials('AWS_SECRET_ACCESS_KEY')
-        PEM_FILE = "C:/Ansible-keys/terraformkeypair.pem"
-        WINDOWS_USER = "Administrator"
+        TF_STATE_BUCKET = "my-terraform-state-bucket-425"
+        TF_STATE_KEY = "terraform.tfstate"
+        S3_BUCKET = "my-terraform-state-bucket-425"
+        SSH_PRIVATE_KEY = "C:/Ansible-keys/terraformkeypair.pem"
+        GIT_BASH = "C:\\Program Files\\Git\\bin\\bash.exe"
     }
 
     stages {
-        stage('Fetch Windows VM IPs') {
+        stage('Get Windows Instance IPs from Terraform State') {
             steps {
                 script {
-                    bat "\"C:\\Program Files\\Git\\bin\\bash.exe\" -c 'AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} aws s3 cp s3://${TF_STATE_BUCKET}/${TF_STATE_KEY} terraform.tfstate'"
+                    // Fetch latest Terraform state file from S3
+                    bat "\"${GIT_BASH}\" -c 'AWS_ACCESS_KEY_ID=${env.AWS_ACCESS_KEY_ID} AWS_SECRET_ACCESS_KEY=${env.AWS_SECRET_ACCESS_KEY} aws s3 cp s3://${TF_STATE_BUCKET}/${TF_STATE_KEY} terraform.tfstate'"
 
+                    // Extract only Windows VM public IPs from Terraform state
                     def windowsIPs = powershell(returnStdout: true, script: """
                         \$tfState = Get-Content terraform.tfstate -Raw | ConvertFrom-Json
-                        \$windowsIPs = \$tfState.resources | Where-Object { \$_.'type' -eq 'aws_instance' } | ForEach-Object { \$_.'instances' } | ForEach-Object { \$_[0].'attributes'.'public_ip' }
-                        \$windowsIPs -join ', '
+                        \$windowsIPs = \$tfState.resources | Where-Object { \$_.'type' -eq 'aws_instance' -and \$_.'name' -match 'windows' } | 
+                            ForEach-Object { \$_.'instances' } | ForEach-Object { \$_[0].'attributes'.'public_ip' }
+                        \$windowsIPs -join ','
                     """).trim()
 
-                    echo "Windows Instance IPs: ${windowsIPs}"
+                    echo "Windows VM IPs: ${windowsIPs}"
+
+                    // Store IPs as an environment variable
                     env.WINDOWS_IPS = windowsIPs
                 }
             }
@@ -30,39 +36,72 @@ pipeline {
 
         stage('Download Scripts from S3') {
             steps {
-                bat """
-                    aws s3 cp s3://${TF_STATE_BUCKET}/ConfigureRemotingForAnsible.ps1 .
-                    aws s3 cp s3://${TF_STATE_BUCKET}/Create_user.ps1 .
-                """
+                script {
+                    echo "Downloading PowerShell scripts from S3"
+
+                    bat "\"${GIT_BASH}\" -c 'AWS_ACCESS_KEY_ID=${env.AWS_ACCESS_KEY_ID} AWS_SECRET_ACCESS_KEY=${env.AWS_SECRET_ACCESS_KEY} aws s3 cp s3://${S3_BUCKET}/ConfigureRemotingForAnsible.ps1 .'"
+                    bat "\"${GIT_BASH}\" -c 'AWS_ACCESS_KEY_ID=${env.AWS_ACCESS_KEY_ID} AWS_SECRET_ACCESS_KEY=${env.AWS_SECRET_ACCESS_KEY} aws s3 cp s3://${S3_BUCKET}/create_user.ps1 .'"
+                    
+                    echo "Scripts downloaded successfully"
+                }
             }
         }
 
-        stage('Transfer Scripts to Windows VMs') {
+        stage('Copy Scripts to Windows VMs') {
             steps {
                 script {
-                    def ipList = env.WINDOWS_IPS.split(', ')
-                    for (ip in ipList) {
-                        bat """
-                            scp -i ${PEM_FILE} -o StrictHostKeyChecking=no ConfigureRemotingForAnsible.ps1 ${WINDOWS_USER}@${ip}:C:\\Windows\\Temp\\
-                            scp -i ${PEM_FILE} -o StrictHostKeyChecking=no create_user.ps1 ${WINDOWS_USER}@${ip}:C:\\Windows\\Temp\\
-                        """
+                    def windowsIPList = env.WINDOWS_IPS.split(',')
+                    def failedIPs = []
+
+                    for (ip in windowsIPList) {
+                        try {
+                            echo "Copying scripts to: ${ip}"
+                            
+                            // Attempt SCP transfer, skip IP if it fails
+                            def result = bat(script: """
+                                scp -i ${SSH_PRIVATE_KEY} -o StrictHostKeyChecking=no ConfigureRemotingForAnsible.ps1 create_user.ps1 Administrator@${ip}:C:\\Windows\\Temp\\
+                            """, returnStatus: true)
+
+                            if (result != 0) {
+                                echo "WARNING: Failed to connect to ${ip}, skipping..."
+                                failedIPs.add(ip)
+                            } else {
+                                echo "Successfully copied scripts to ${ip}"
+                            }
+                        } catch (Exception e) {
+                            echo "ERROR: ${e.getMessage()}, skipping ${ip}"
+                            failedIPs.add(ip)
+                        }
+                    }
+
+                    if (failedIPs.size() > 0) {
+                        echo "WARNING: Failed to connect to these IPs: ${failedIPs}"
                     }
                 }
             }
         }
 
-        stage('Execute Scripts on Windows VMs') {
+        stage('Execute PowerShell Scripts on Windows VMs') {
             steps {
                 script {
-                    def ipList = env.WINDOWS_IPS.split(', ')
-                    for (ip in ipList) {
-                        bat """
-                            ssh -i ${PEM_FILE} -o StrictHostKeyChecking=no ${WINDOWS_USER}@${ip} ^
-                            "powershell -ExecutionPolicy Bypass -File C:\\Windows\\Temp\\ConfigureRemotingForAnsible.ps1"
+                    def windowsIPList = env.WINDOWS_IPS.split(',')
 
-                            ssh -i ${PEM_FILE} -o StrictHostKeyChecking=no ${WINDOWS_USER}@${ip} ^
-                            "powershell -ExecutionPolicy Bypass -File C:\\Windows\\Temp\\create_user.ps1"
-                        """
+                    for (ip in windowsIPList) {
+                        try {
+                            echo "Executing scripts on: ${ip}"
+
+                            def result = bat(script: """
+                                ssh -i ${SSH_PRIVATE_KEY} -o StrictHostKeyChecking=no Administrator@${ip} "powershell -ExecutionPolicy Bypass -File C:\\Windows\\Temp\\ConfigureRemotingForAnsible.ps1; C:\\Windows\\Temp\\create_user.ps1"
+                            """, returnStatus: true)
+
+                            if (result != 0) {
+                                echo "WARNING: Script execution failed on ${ip}, skipping..."
+                            } else {
+                                echo "Successfully executed scripts on ${ip}"
+                            }
+                        } catch (Exception e) {
+                            echo "ERROR: ${e.getMessage()}, skipping ${ip}"
+                        }
                     }
                 }
             }
