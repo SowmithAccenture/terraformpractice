@@ -11,32 +11,24 @@ pipeline {
     }
 
     stages {
-        stage('Get Windows Instance IPs from Terraform State') {
+          stage('Fetch Windows VM IPs from Terraform State') {
             steps {
                 script {
-                    def gitBash = 'C:\\Program Files\\Git\\bin\\bash.exe'
-
-                    // Fetch the latest Terraform state file from S3
-                    bat "\"${gitBash}\" -c 'AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} aws s3 cp s3://${TF_STATE_BUCKET}/${TF_STATE_KEY} terraform.tfstate'"
-
-                    // Extract Windows instance IPs from the terraform state file and store them in a variable
-                    def windowsIPs = powershell(returnStdout: true, script: """
-                        \$tfState = Get-Content terraform.tfstate -Raw | ConvertFrom-Json
-                        \$windowsInstances = \$tfState.resources | Where-Object { 
-                            \$_.'type' -eq 'aws_instance' -and \$_.'instances'[0].'attributes'.'platform' -eq 'windows' 
-                        }
-                        \$windowsIPs = \$windowsInstances | ForEach-Object { \$_.'instances'[0].'attributes'.'public_ip' }
-                        \$windowsIPs -join ','
-                    """).trim()
-
-                    echo "Windows Instance IPs: ${windowsIPs}"
-
-                    // Store IPs as environment variable for later use
-                    env.WINDOWS_IPS = windowsIPs
+                    echo "Fetching Windows VM IPs from Terraform State..."
+                    def jsonOutput = sh(script: """
+                        aws s3 cp s3://$S3_BUCKET/terraform.tfstate terraform.tfstate --quiet
+                        cat terraform.tfstate | jq -r '.resources[] | select(.type=="aws_instance") | .instances[] | select(.attributes.platform=="windows") | .attributes.public_ip'
+                    """, returnStdout: true).trim()
+                    
+                    if (jsonOutput) {
+                        env.WINDOWS_IPS = jsonOutput.split("\n").join(" ")
+                        echo "Windows VM IPs: ${env.WINDOWS_IPS}"
+                    } else {
+                        error "No Windows VM IPs found in Terraform state!"
+                    }
                 }
             }
         }
-
 
         stage('Decrypt Windows Passwords') {
             steps {
