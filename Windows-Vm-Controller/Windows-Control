@@ -11,32 +11,32 @@ pipeline {
     }
 
     stages {
-        stage('Fetch Windows Instance IPs') {
+        stage('Get Windows Instance IPs from Terraform State') {
             steps {
                 script {
-                    echo "Fetching Terraform state file from S3..."
-                    
-                    // Download Terraform state file from S3
-                    bat "\"C:\\Program Files\\Git\\bin\\bash.exe\" -c 'AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} aws s3 cp s3://${TF_STATE_BUCKET}/${TF_STATE_KEY} terraform.tfstate'"
+                    def gitBash = 'C:\\Program Files\\Git\\bin\\bash.exe'
 
-                    // Extract only Windows instance IPs
+                    // Fetch the latest Terraform state file from S3
+                    bat "\"${gitBash}\" -c 'AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} aws s3 cp s3://${TF_STATE_BUCKET}/${TF_STATE_KEY} terraform.tfstate'"
+
+                    // Extract Windows instance IPs from the terraform state file and store them in a variable
                     def windowsIPs = powershell(returnStdout: true, script: """
                         \$tfState = Get-Content terraform.tfstate -Raw | ConvertFrom-Json
-                        \$windowsInstances = \$tfState.resources | Where-Object { \$_.type -eq 'aws_instance' -and \$_.'instances'[0].'attributes'.'platform' -eq 'windows' }
+                        \$windowsInstances = \$tfState.resources | Where-Object { 
+                            \$_.'type' -eq 'aws_instance' -and \$_.'instances'[0].'attributes'.'platform' -eq 'windows' 
+                        }
                         \$windowsIPs = \$windowsInstances | ForEach-Object { \$_.'instances'[0].'attributes'.'public_ip' }
-                        \$windowsIPs -join ' '
+                        \$windowsIPs -join ','
                     """).trim()
 
                     echo "Windows Instance IPs: ${windowsIPs}"
 
-                    if (!windowsIPs) {
-                        error "No Windows VMs found!"
-                    }
-
+                    // Store IPs as environment variable for later use
                     env.WINDOWS_IPS = windowsIPs
                 }
             }
         }
+
 
         stage('Decrypt Windows Passwords') {
             steps {
