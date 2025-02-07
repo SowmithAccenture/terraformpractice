@@ -26,6 +26,10 @@ pipeline {
                         \$windowsIPs -join ','
                     """).trim()
 
+                    if (!windowsIPs) {
+                        error("ERROR: No Windows VM IPs found in Terraform state!")
+                    }
+
                     echo "Windows VM IPs: ${windowsIPs}"
 
                     // Store IPs as an environment variable
@@ -40,7 +44,7 @@ pipeline {
                     echo "Downloading PowerShell scripts from S3"
 
                     bat "\"${GIT_BASH}\" -c 'AWS_ACCESS_KEY_ID=${env.AWS_ACCESS_KEY_ID} AWS_SECRET_ACCESS_KEY=${env.AWS_SECRET_ACCESS_KEY} aws s3 cp s3://${S3_BUCKET}/ConfigureRemotingForAnsible.ps1 .'"
-                    bat "\"${GIT_BASH}\" -c 'AWS_ACCESS_KEY_ID=${env.AWS_ACCESS_KEY_ID} AWS_SECRET_ACCESS_KEY=${env.AWS_SECRET_ACCESS_KEY} aws s3 cp s3://${S3_BUCKET}/Create_user.ps1 .'"
+                    bat "\"${GIT_BASH}\" -c 'AWS_ACCESS_KEY_ID=${env.AWS_ACCESS_KEY_ID} AWS_SECRET_ACCESS_KEY=${env.AWS_SECRET_ACCESS_KEY} aws s3 cp s3://${S3_BUCKET}/create_user.ps1 .'"
                     
                     echo "Scripts downloaded successfully"
                 }
@@ -51,31 +55,20 @@ pipeline {
             steps {
                 script {
                     def windowsIPList = env.WINDOWS_IPS.split(',')
-                    def failedIPs = []
 
                     for (ip in windowsIPList) {
-                        try {
-                            echo "Copying scripts to: ${ip}"
-                            
-                            // Attempt SCP transfer, skip IP if it fails
-                            def result = bat(script: """
-                                scp -i ${SSH_PRIVATE_KEY} -o StrictHostKeyChecking=no ConfigureRemotingForAnsible.ps1 create_user.ps1 Administrator@${ip}:C:\\Windows\\Temp\\
-                            """, returnStatus: true)
+                        echo "Copying scripts to: ${ip}"
+                        
+                        // Attempt SCP transfer, throw error if it fails
+                        def result = bat(script: """
+                            scp -i ${SSH_PRIVATE_KEY} -o StrictHostKeyChecking=no ConfigureRemotingForAnsible.ps1 create_user.ps1 Administrator@${ip}:C:\\Windows\\Temp\\
+                        """, returnStatus: true)
 
-                            if (result != 0) {
-                                echo "WARNING: Failed to connect to ${ip}, skipping..."
-                                failedIPs.add(ip)
-                            } else {
-                                echo "Successfully copied scripts to ${ip}"
-                            }
-                        } catch (Exception e) {
-                            echo "ERROR: ${e.getMessage()}, skipping ${ip}"
-                            failedIPs.add(ip)
+                        if (result != 0) {
+                            error("ERROR: Failed to copy scripts to ${ip}. Possible reasons: SSH unreachable, incorrect key, or incorrect permissions.")
+                        } else {
+                            echo "Successfully copied scripts to ${ip}"
                         }
-                    }
-
-                    if (failedIPs.size() > 0) {
-                        echo "WARNING: Failed to connect to these IPs: ${failedIPs}"
                     }
                 }
             }
@@ -87,20 +80,16 @@ pipeline {
                     def windowsIPList = env.WINDOWS_IPS.split(',')
 
                     for (ip in windowsIPList) {
-                        try {
-                            echo "Executing scripts on: ${ip}"
+                        echo "Executing scripts on: ${ip}"
 
-                            def result = bat(script: """
-                                ssh -i ${SSH_PRIVATE_KEY} -o StrictHostKeyChecking=no Administrator@${ip} "powershell -ExecutionPolicy Bypass -File C:\\Windows\\Temp\\ConfigureRemotingForAnsible.ps1; C:\\Windows\\Temp\\create_user.ps1"
-                            """, returnStatus: true)
+                        def result = bat(script: """
+                            ssh -i ${SSH_PRIVATE_KEY} -o StrictHostKeyChecking=no Administrator@${ip} "powershell -ExecutionPolicy Bypass -File C:\\Windows\\Temp\\ConfigureRemotingForAnsible.ps1; C:\\Windows\\Temp\\create_user.ps1"
+                        """, returnStatus: true)
 
-                            if (result != 0) {
-                                echo "WARNING: Script execution failed on ${ip}, skipping..."
-                            } else {
-                                echo "Successfully executed scripts on ${ip}"
-                            }
-                        } catch (Exception e) {
-                            echo "ERROR: ${e.getMessage()}, skipping ${ip}"
+                        if (result != 0) {
+                            error("ERROR: Script execution failed on ${ip}. Check SSH access, PowerShell execution policy, and script contents.")
+                        } else {
+                            echo "Successfully executed scripts on ${ip}"
                         }
                     }
                 }
