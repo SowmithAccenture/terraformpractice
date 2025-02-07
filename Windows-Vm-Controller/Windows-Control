@@ -6,7 +6,7 @@ pipeline {
         TF_STATE_KEY = "terraform.tfstate"
         AWS_ACCESS_KEY_ID = credentials('AWS_ACCESS_KEY_ID')
         AWS_SECRET_ACCESS_KEY = credentials('AWS_SECRET_ACCESS_KEY')
-        PEM_FILE = "C:/path/to/terraformkeypair.pem"
+        PEM_FILE = "C:/Ansible-keys/terraformkeypair.pem"
         WINDOWS_USER = "Administrator"
     }
 
