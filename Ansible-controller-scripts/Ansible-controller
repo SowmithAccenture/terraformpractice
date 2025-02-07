@@ -1,0 +1,123 @@
+pipeline {
+    agent any
+
+    environment {
+        PPK_FILE = "C:/Ansible-keys/ansiblekeypair.ppk"
+        ANSIBLE_USER = "ec2-user"
+        INVENTORY_PATH = "/etc/ansible/hosts"  // Use the variable for the inventory path
+        TF_STATE_BUCKET = "my-terraform-state-bucket-425"
+        TF_STATE_KEY = "terraform.tfstate"
+        AWS_ACCESS_KEY_ID     = credentials('AWS_ACCESS_KEY_ID')
+        AWS_SECRET_ACCESS_KEY = credentials('AWS_SECRET_ACCESS_KEY')
+    }
+
+    stages {
+        stage('Get Ansible Host IP') {
+            steps {
+                script {
+                    def gitBash = 'C:\\Program Files\\Git\\bin\\bash.exe'
+
+                    // Fetch the latest Terraform state file from S3
+                    bat "\"${gitBash}\" -c 'AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} aws s3 cp s3://${TF_STATE_BUCKET}/${TF_STATE_KEY} terraform.tfstate'"
+
+                    // Extract the Linux instance's public IP from the state file
+                    def ansibleHostIP = powershell(returnStdout: true, script: """
+                        \$tfState = Get-Content terraform.tfstate -Raw | ConvertFrom-Json
+                        \$linuxIP = \$tfState.outputs.linux_instance_public_ip.value.\"ansible-controller\"
+                        Write-Output \$linuxIP
+                    """).trim()
+
+                    // Set the extracted IP as an environment variable
+                    env.ANSIBLE_HOST = ansibleHostIP
+                    echo "Ansible Controller IP: ${ANSIBLE_HOST}"
+                }
+            }
+        }
+
+        stage('Check and Install Ansible') {
+            steps {
+                script {
+                    bat """
+                        plink -i ${PPK_FILE} ${ANSIBLE_USER}@${ANSIBLE_HOST} ^
+                        "if ! command -v ansible >/dev/null 2>&1; then sudo yum update -y && sudo amazon-linux-extras enable ansible2 && sudo yum install -y ansible; else echo 'Ansible already installed'; fi"
+                    """
+                }
+            }
+        }
+
+        stage('Get Windows Instance IPs from Terraform State') {
+            steps {
+                script {
+                    // Fetch the latest terraform state from S3 using AWS credentials
+                    bat "\"C:\\Program Files\\Git\\bin\\bash.exe\" -c 'AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} aws s3 cp s3://${TF_STATE_BUCKET}/${TF_STATE_KEY} terraform.tfstate'"
+
+                    // Extract Windows instance IPs from the terraform state file and store them in a variable
+                    def windowsIPs = powershell(returnStdout: true, script: """
+                        \$tfState = Get-Content terraform.tfstate -Raw | ConvertFrom-Json
+                        \$windowsIPs = \$tfState.resources | Where-Object { \$_.'type' -eq 'aws_instance' } | ForEach-Object { \$_.'instances' } | ForEach-Object { \$_[0].'attributes'.'public_ip' }
+                        \$windowsIPs -join ', '
+                    """).trim()
+
+                    echo "Windows Instance IPs: ${windowsIPs}"
+
+                    // Store IPs as environment variable for later use
+                    env.WINDOWS_IPS = windowsIPs
+                }
+            }
+        }
+
+        stage('Update Ansible Hosts File') {
+            steps {
+                script {
+                    // Clear the old hosts file before updating
+                    bat """
+                        plink -i ${PPK_FILE} ${ANSIBLE_USER}@${ANSIBLE_HOST} ^
+                        "echo '' | sudo tee ${INVENTORY_PATH} > /dev/null"
+                    """
+
+                    // Prepare the command to append IPs to the hosts file
+                    def windowsIPList = env.WINDOWS_IPS.split(', ')
+
+                    // Add the [windows] section and append IPs to it
+                    bat """
+                        plink -i ${PPK_FILE} ${ANSIBLE_USER}@${ANSIBLE_HOST} ^
+                        "echo '[windows]' | sudo tee -a ${INVENTORY_PATH} > /dev/null"
+                    """
+                    
+                    windowsIPList.each { ip ->
+                        bat """
+                            plink -i ${PPK_FILE} ${ANSIBLE_USER}@${ANSIBLE_HOST} ^
+                            "echo '${ip}' | sudo tee -a ${INVENTORY_PATH} > /dev/null"
+                        """
+                    }
+
+                    // Now, append the connection settings to the [windows:vars] section
+                    bat """
+                        plink -i ${PPK_FILE} ${ANSIBLE_USER}@${ANSIBLE_HOST} ^
+                        "echo '[windows:vars]' | sudo tee -a ${INVENTORY_PATH} > /dev/null"
+                    """
+                    bat """
+                        plink -i ${PPK_FILE} ${ANSIBLE_USER}@${ANSIBLE_HOST} ^
+                        "echo 'ansible_user=ansadmin' | sudo tee -a ${INVENTORY_PATH} > /dev/null"
+                    """
+                    bat """
+                        plink -i ${PPK_FILE} ${ANSIBLE_USER}@${ANSIBLE_HOST} ^
+                        "echo 'ansible_password=test@123' | sudo tee -a ${INVENTORY_PATH} > /dev/null"
+                    """
+                    bat """
+                        plink -i ${PPK_FILE} ${ANSIBLE_USER}@${ANSIBLE_HOST} ^
+                        "echo 'ansible_connection=winrm' | sudo tee -a ${INVENTORY_PATH} > /dev/null"
+                    """
+                    bat """
+                        plink -i ${PPK_FILE} ${ANSIBLE_USER}@${ANSIBLE_HOST} ^
+                        "echo 'ansible_winrm_port=5986' | sudo tee -a ${INVENTORY_PATH} > /dev/null"
+                    """
+                    bat """
+                        plink -i ${PPK_FILE} ${ANSIBLE_USER}@${ANSIBLE_HOST} ^
+                        "echo 'ansible_winrm_server_cert_validation=ignore' | sudo tee -a ${INVENTORY_PATH} > /dev/null"
+                    """
+                }
+            }
+        }
+    }
+}
