@@ -11,25 +11,31 @@ pipeline {
     }
 
     stages {
-          stage('Fetch Windows VM IPs from Terraform State') {
+          stage('Get Windows Instance IPs from Terraform State') {
             steps {
                 script {
-                    echo "Fetching Windows VM IPs from Terraform State..."
-                    def jsonOutput = sh(script: """
-                        aws s3 cp s3://$S3_BUCKET/terraform.tfstate terraform.tfstate --quiet
-                        cat terraform.tfstate | jq -r '.resources[] | select(.type=="aws_instance") | .instances[] | select(.attributes.platform=="windows") | .attributes.public_ip'
-                    """, returnStdout: true).trim()
-                    
-                    if (jsonOutput) {
-                        env.WINDOWS_IPS = jsonOutput.split("\n").join(" ")
-                        echo "Windows VM IPs: ${env.WINDOWS_IPS}"
-                    } else {
-                        error "No Windows VM IPs found in Terraform state!"
+                    // Fetch latest Terraform state file from S3
+                    bat "\"${GIT_BASH}\" -c 'AWS_ACCESS_KEY_ID=${env.AWS_ACCESS_KEY_ID} AWS_SECRET_ACCESS_KEY=${env.AWS_SECRET_ACCESS_KEY} aws s3 cp s3://${TF_STATE_BUCKET}/${TF_STATE_KEY} terraform.tfstate'"
+
+                    // Extract only Windows VM public IPs from Terraform state
+                    def windowsIPs = powershell(returnStdout: true, script: """
+                        \$tfState = Get-Content terraform.tfstate -Raw | ConvertFrom-Json
+                        \$windowsIPs = \$tfState.resources | Where-Object { \$_.'type' -eq 'aws_instance' -and \$_.'name' -match 'windows' } | 
+                            ForEach-Object { \$_.'instances' } | ForEach-Object { \$_[0].'attributes'.'public_ip' }
+                        \$windowsIPs -join ','
+                    """).trim()
+
+                    if (!windowsIPs) {
+                        error("ERROR: No Windows VM IPs found in Terraform state!")
                     }
+
+                    echo "Windows VM IPs: ${windowsIPs}"
+
+                    // Store IPs as an environment variable
+                    env.WINDOWS_IPS = windowsIPs
                 }
             }
         }
-
         stage('Decrypt Windows Passwords') {
             steps {
                 script {
