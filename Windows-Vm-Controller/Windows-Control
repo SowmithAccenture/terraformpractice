@@ -1,39 +1,46 @@
 pipeline {
     agent any
-
     environment {
         AWS_ACCESS_KEY_ID = credentials('AWS_ACCESS_KEY_ID')
         AWS_SECRET_ACCESS_KEY = credentials('AWS_SECRET_ACCESS_KEY')
-        TF_STATE_BUCKET = "my-terraform-state-bucket-425"
-        TF_STATE_KEY = "terraform.tfstate"
-        S3_BUCKET = "my-terraform-state-bucket-425"
-        SSH_PRIVATE_KEY = "C:/Ansible-keys/terraformkeypair.pem"
-        GIT_BASH = "C:\\Program Files\\Git\\bin\\bash.exe"
+        PEM_FILE = 'C:/Ansible-keys/terraformkeypair.pem'
+        S3_BUCKET = 'my-terraform-state-bucket-425'
+        SCRIPT_FOLDER = 'C:/Windows/Temp'
     }
-
     stages {
-        stage('Get Windows Instance IPs from Terraform State') {
+        stage('Fetch Windows VM IPs from Terraform State') {
             steps {
                 script {
-                    // Fetch latest Terraform state file from S3
-                    bat "\"${GIT_BASH}\" -c 'AWS_ACCESS_KEY_ID=${env.AWS_ACCESS_KEY_ID} AWS_SECRET_ACCESS_KEY=${env.AWS_SECRET_ACCESS_KEY} aws s3 cp s3://${TF_STATE_BUCKET}/${TF_STATE_KEY} terraform.tfstate'"
-
-                    // Extract only Windows VM public IPs from Terraform state
-                    def windowsIPs = powershell(returnStdout: true, script: """
-                        \$tfState = Get-Content terraform.tfstate -Raw | ConvertFrom-Json
-                        \$windowsIPs = \$tfState.resources | Where-Object { \$_.'type' -eq 'aws_instance' -and \$_.'name' -match 'windows' } | 
-                            ForEach-Object { \$_.'instances' } | ForEach-Object { \$_[0].'attributes'.'public_ip' }
-                        \$windowsIPs -join ','
-                    """).trim()
-
-                    if (!windowsIPs) {
-                        error("ERROR: No Windows VM IPs found in Terraform state!")
+                    echo "Fetching Windows VM IPs from Terraform State..."
+                    def jsonOutput = sh(script: """
+                        aws s3 cp s3://$S3_BUCKET/terraform.tfstate terraform.tfstate --quiet
+                        cat terraform.tfstate | jq -r '.resources[] | select(.type=="aws_instance") | .instances[] | select(.attributes.platform=="windows") | .attributes.public_ip'
+                    """, returnStdout: true).trim()
+                    
+                    if (jsonOutput) {
+                        env.WINDOWS_IPS = jsonOutput.split("\n").join(" ")
+                        echo "Windows VM IPs: ${env.WINDOWS_IPS}"
+                    } else {
+                        error "No Windows VM IPs found in Terraform state!"
                     }
+                }
+            }
+        }
 
-                    echo "Windows VM IPs: ${windowsIPs}"
-
-                    // Store IPs as an environment variable
-                    env.WINDOWS_IPS = windowsIPs
+        stage('Decrypt Windows Password') {
+            steps {
+                script {
+                    echo "Decrypting Windows Administrator Password..."
+                    def decryptedPass = sh(script: """
+                        aws ec2 get-password-data --instance-id $(cat terraform.tfstate | jq -r '.resources[] | select(.type=="aws_instance") | .instances[] | select(.attributes.platform=="windows") | .attributes.id') --priv-key $PEM_FILE --query 'PasswordData' --output text
+                    """, returnStdout: true).trim()
+                    
+                    if (decryptedPass) {
+                        env.WINDOWS_PASSWORD = decryptedPass
+                        echo "Decrypted Windows Password: [REDACTED]"
+                    } else {
+                        error "Failed to decrypt Windows password!"
+                    }
                 }
             }
         }
@@ -41,55 +48,57 @@ pipeline {
         stage('Download Scripts from S3') {
             steps {
                 script {
-                    echo "Downloading PowerShell scripts from S3"
+                    def ips = env.WINDOWS_IPS.split(" ")
+                    def username = "Administrator"
 
-                    bat "\"${GIT_BASH}\" -c 'AWS_ACCESS_KEY_ID=${env.AWS_ACCESS_KEY_ID} AWS_SECRET_ACCESS_KEY=${env.AWS_SECRET_ACCESS_KEY} aws s3 cp s3://${S3_BUCKET}/ConfigureRemotingForAnsible.ps1 .'"
-                    bat "\"${GIT_BASH}\" -c 'AWS_ACCESS_KEY_ID=${env.AWS_ACCESS_KEY_ID} AWS_SECRET_ACCESS_KEY=${env.AWS_SECRET_ACCESS_KEY} aws s3 cp s3://${S3_BUCKET}/Create_user.ps1 .'"
-                    
-                    echo "Scripts downloaded successfully"
-                }
-            }
-        }
+                    for (ip in ips) {
+                        try {
+                            echo "Downloading scripts on Windows VM: ${ip}"
 
-        stage('Copy Scripts to Windows VMs') {
-            steps {
-                script {
-                    def windowsIPList = env.WINDOWS_IPS.split(',')
+                            powershell """
+                                \$User = '${username}'
+                                \$Password = '${env.WINDOWS_PASSWORD}'
+                                \$SecurePassword = ConvertTo-SecureString \$Password -AsPlainText -Force
+                                \$Credential = New-Object System.Management.Automation.PSCredential (\$User, \$SecurePassword)
 
-                    for (ip in windowsIPList) {
-                        echo "Copying scripts to: ${ip}"
-                        
-                        // Attempt SCP transfer, throw error if it fails
-                        def result = bat(script: """
-                            scp -i ${SSH_PRIVATE_KEY} -o StrictHostKeyChecking=no ConfigureRemotingForAnsible.ps1 Create_user.ps1 Administrator@${ip}:C:\\Windows\\Temp\\
-                        """, returnStatus: true)
-
-                        if (result != 0) {
-                            error("ERROR: Failed to copy scripts to ${ip}. Possible reasons: SSH unreachable, incorrect key, or incorrect permissions.")
-                        } else {
-                            echo "Successfully copied scripts to ${ip}"
+                                Invoke-Command -ComputerName ${ip} -Credential \$Credential -ScriptBlock {
+                                    mkdir C:\\Windows\\Temp -ErrorAction SilentlyContinue
+                                    aws s3 cp s3://${env.S3_BUCKET}/ConfigureRemotingForAnsible.ps1 C:\\Windows\\Temp\\ConfigureRemotingForAnsible.ps1
+                                    aws s3 cp s3://${env.S3_BUCKET}/Create_user.ps1 C:\\Windows\\Temp\\Create_user.ps1
+                                }
+                            """
+                        } catch (Exception e) {
+                            error "Failed to download scripts on ${ip}. Error: ${e.message}"
                         }
                     }
                 }
             }
         }
 
-        stage('Execute PowerShell Scripts on Windows VMs') {
+        stage('Execute Scripts on Windows VMs') {
             steps {
                 script {
-                    def windowsIPList = env.WINDOWS_IPS.split(',')
+                    def ips = env.WINDOWS_IPS.split(" ")
+                    def username = "Administrator"
 
-                    for (ip in windowsIPList) {
-                        echo "Executing scripts on: ${ip}"
+                    for (ip in ips) {
+                        try {
+                            echo "Executing scripts on Windows VM: ${ip}"
 
-                        def result = bat(script: """
-                            ssh -i ${SSH_PRIVATE_KEY} -o StrictHostKeyChecking=no Administrator@${ip} "powershell -ExecutionPolicy Bypass -File C:\\Windows\\Temp\\ConfigureRemotingForAnsible.ps1; C:\\Windows\\Temp\\Create_user.ps1"
-                        """, returnStatus: true)
+                            powershell """
+                                \$User = '${username}'
+                                \$Password = '${env.WINDOWS_PASSWORD}'
+                                \$SecurePassword = ConvertTo-SecureString \$Password -AsPlainText -Force
+                                \$Credential = New-Object System.Management.Automation.PSCredential (\$User, \$SecurePassword)
 
-                        if (result != 0) {
-                            error("ERROR: Script execution failed on ${ip}. Check SSH access, PowerShell execution policy, and script contents.")
-                        } else {
-                            echo "Successfully executed scripts on ${ip}"
+                                Invoke-Command -ComputerName ${ip} -Credential \$Credential -ScriptBlock {
+                                    cd C:\\Windows\\Temp\\
+                                    powershell -ExecutionPolicy Bypass -File .\\ConfigureRemotingForAnsible.ps1
+                                    powershell -ExecutionPolicy Bypass -File .\\Create_user.ps1
+                                }
+                            """
+                        } catch (Exception e) {
+                            error "Failed to execute scripts on ${ip}. Error: ${e.message}"
                         }
                     }
                 }
