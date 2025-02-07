@@ -50,11 +50,15 @@ pipeline {
                 script {
                     bat """
                         plink -i ${PPK_FILE} ${ANSIBLE_USER}@${ANSIBLE_HOST} ^
-                        "sudo yum install -y python3 && sudo alternatives --set python /usr/bin/python3 && sudo python3 -m pip install --upgrade pip"
+                        "if ! command -v python3 >/dev/null 2>&1; then sudo yum install -y python3; else echo 'Python 3 already installed'; fi"
+
+                        plink -i ${PPK_FILE} ${ANSIBLE_USER}@${ANSIBLE_HOST} ^
+                        "if ! command -v pip3 >/dev/null 2>&1; then sudo python3 -m ensurepip; sudo python3 -m pip install --upgrade pip; else echo 'pip already installed'; fi"
                     """
                 }
             }
         }
+
 
         stage('Get Windows Instance IPs from Terraform State') {
             steps {
