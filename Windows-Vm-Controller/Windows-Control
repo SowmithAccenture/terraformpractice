@@ -112,7 +112,7 @@ stage('Decrypt Windows Passwords') {
     }
 }
 
-stage('Configure TrustedHosts for WinRM') {
+stage('Enable WinRM & Configure TrustedHosts') {
     steps {
         script {
             def ipList = env.WINDOWS_IPS?.split(',')?.findAll { it?.trim() } ?: []
@@ -129,7 +129,7 @@ stage('Configure TrustedHosts for WinRM') {
             }
 
             for (ip in ipList) {
-                echo "Configuring TrustedHosts on ${ip}..."
+                echo "Enabling WinRM & Configuring TrustedHosts on ${ip}..."
 
                 def password = passwordMap[ip]
                 if (!password) {
@@ -137,22 +137,30 @@ stage('Configure TrustedHosts for WinRM') {
                 }
 
                 def result = powershell(returnStatus: true, script: """
-                    \$adminCreds = New-Object System.Management.Automation.PSCredential('${ADMIN_USERNAME}', (ConvertTo-SecureString '${password}' -AsPlainText -Force))
+                    \$SecurePassword = ConvertTo-SecureString '${password}' -AsPlainText -Force
+                    \$Cred = New-Object System.Management.Automation.PSCredential('${ADMIN_USERNAME}', \$SecurePassword)
 
-                    Invoke-Command -ComputerName ${ip} -Credential \$adminCreds -ScriptBlock {
+                    Invoke-Command -ComputerName ${ip} -Credential \$Cred -ScriptBlock {
+                        # Ensure WinRM is fully enabled
+                        winrm quickconfig -quiet
+                        Enable-PSRemoting -Force
+                        winrm set winrm/config/service/Auth '@{Basic="true"}'
+                        winrm set winrm/config/client '@{TrustedHosts="*"}'
+                        Restart-Service WinRM
+
+                        # Configure TrustedHosts explicitly
                         Set-Item WSMan:\\localhost\\Client\\TrustedHosts -Value '*' -Force
                         Restart-Service WinRM
                     }
                 """)
 
                 if (result != 0) {
-                    error "Failed to configure TrustedHosts on ${ip}"
+                    error "Failed to configure TrustedHosts & enable WinRM on ${ip}"
                 }
             }
         }
     }
 }
-
 
 
            stage('Execute Scripts on Windows VMs') {
