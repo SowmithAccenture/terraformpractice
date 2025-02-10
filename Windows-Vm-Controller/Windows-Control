@@ -73,8 +73,14 @@ pipeline {
                         }
 
                         def decryptedPassword = powershell(returnStdout: true, script: """
-                            echo "${encryptedPassword}" | "C:\\OpenSSL-Win64\\bin\\openssl.exe" base64 -d -A | "C:\\OpenSSL-Win64\\bin\\openssl.exe" pkeyutl -decrypt -inkey C:\\Ansible-keys\\terraformkeypair.pem
-                        """).trim()
+                        \$opensslPath = "C:\\OpenSSL-Win64\\bin\\openssl.exe"
+                        \$privateKeyPath = "C:\\Ansible-keys\\terraformkeypair.pem"
+                        \$encryptedPassword = "${encryptedPassword}"
+
+                        \$decryptedPassword = echo \$encryptedPassword | & \$opensslPath base64 -d -A | & \$opensslPath pkeyutl -decrypt -inkey \$privateKeyPath
+                        Write-Output \$decryptedPassword
+                    """).trim()
+
 
 
                         if (!decryptedPassword) {
