@@ -73,8 +73,9 @@ pipeline {
                         }
 
                         def decryptedPassword = powershell(returnStdout: true, script: """
-                            echo "${encryptedPassword}" | openssl base64 -d -A | openssl pkeyutl -decrypt -inkey C:\\Ansible-keys\\terraformkeypair.pem
+                            echo "${encryptedPassword}" | "C:\\OpenSSL-Win64\\bin\\openssl.exe" base64 -d -A | "C:\\OpenSSL-Win64\\bin\\openssl.exe" pkeyutl -decrypt -inkey C:\\Ansible-keys\\terraformkeypair.pem
                         """).trim()
+
 
                         if (!decryptedPassword) {
                             error "Failed to decrypt password for ${ip}"
