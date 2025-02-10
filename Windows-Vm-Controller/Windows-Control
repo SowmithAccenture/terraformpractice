@@ -88,7 +88,7 @@ stage('Decrypt Windows Passwords') {
                         \$DecryptedPassword = [System.Text.Encoding]::UTF8.GetString(\$Decoded) | openssl pkeyutl -decrypt -inkey "${privateKeyFile}"
                         Write-Output \$DecryptedPassword
                     """).trim()
-
+                    echo "decryptedpasswor = ${decryptedPassword}"
                     if (!decryptedPassword) {
                         echo "WARNING: Failed to decrypt password for ${ip}. Skipping..."
                         continue
