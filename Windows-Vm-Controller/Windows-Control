@@ -100,6 +100,23 @@ pipeline {
         }
     }
 }
+stage('Configure TrustedHosts for WinRM') {
+    steps {
+        script {
+            def ipList = env.WINDOWS_IPS.split(',').findAll { it?.trim() }
+            for (ip in ipList) {
+                echo "Configuring TrustedHosts on ${ip}..."
+                
+                powershell """
+                    Invoke-Command -ComputerName ${ip} -ScriptBlock {
+                        Set-Item WSMan:\\localhost\\Client\\TrustedHosts -Value '*' -Force
+                        Restart-Service WinRM
+                    } -Credential (New-Object PSCredential 'Administrator', (ConvertTo-SecureString '${password}' -AsPlainText -Force))
+                """
+            }
+        }
+    }
+}
 
            stage('Execute Scripts on Windows VMs') {
     steps {
