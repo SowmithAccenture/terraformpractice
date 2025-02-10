@@ -52,120 +52,105 @@ pipeline {
         }
 
         stage('Decrypt Windows Passwords') {
-                    steps {
-                        script {
-                            withCredentials([file(credentialsId: 'windows-private-key', variable: 'PRIVATE_KEY_PATH')]) {
-                                if (!env.WINDOWS_IPS?.trim()) {
-                                    error "ERROR: No Windows VM IPs found in Terraform state!"
-                                }
-
-                                def ipList = env.WINDOWS_IPS.split(',').findAll { it?.trim() } // Removes null/empty IPs
-                                def passwords = [:]
-
-                                for (ip in ipList) {
-                                    echo "Decrypting password for ${ip}..."
-
-                                    def instanceId = powershell(returnStdout: true, script: """
-                                        aws ec2 describe-instances --filters "Name=ip-address,Values=${ip}" --query "Reservations[*].Instances[*].InstanceId" --output text --region us-east-1
-                                    """).trim()
-
-                                    if (!instanceId) {
-                                        error "ERROR: Instance ID not found for IP ${ip}"
-                                    }
-
-                                    def encryptedPassword = powershell(returnStdout: true, script: """
-                                        aws ec2 get-password-data --instance-id "${instanceId}" --query 'PasswordData' --output text --region us-east-1
-                                    """).trim()
-
-                                    if (!encryptedPassword || encryptedPassword == "None") {
-                                        error "ERROR: Encrypted password not found for ${ip}"
-                                    }
-
-                                    def decryptedPassword = powershell(returnStdout: true, script: """
-                                        \$opensslPath = "C:\\OpenSSL-Win64\\bin\\openssl.exe"
-                                        \$privateKeyPath = "${PRIVATE_KEY_PATH}"
-                                        \$encryptedPassword = "${encryptedPassword}"
-
-                                        \$decryptedPassword = echo \$encryptedPassword | & \$opensslPath base64 -d -A | & \$opensslPath pkeyutl -decrypt -inkey \$privateKeyPath
-                                        Write-Output \$decryptedPassword
-                                    """).trim()
-
-                                    if (!decryptedPassword) {
-                                        error "ERROR: Failed to decrypt password for ${ip}"
-                                    }
-
-                                    passwords[ip] = decryptedPassword
-                                }
-
-                                if (passwords.isEmpty()) {
-                                    error "ERROR: No passwords were decrypted!"
-                                }
-
-                                env.WINDOWS_PASSWORDS = passwords.collect { key, value -> "${key}:${value}" }.join(',')
-                            }
-                        }
-                    }
-        }
-
-
-
-        stage('Execute Scripts on Windows VMs') {
             steps {
                 script {
-                    if (!env.WINDOWS_IPS?.trim()) {
-                        error "ERROR: No Windows VM IPs available!"
-                    }
-
-                    if (!env.WINDOWS_PASSWORDS?.trim()) {
-                        error "ERROR: No passwords available for Windows VMs!"
-                    }
-
-                    def ipList = env.WINDOWS_IPS.split(',').findAll { it?.trim() } // Removes null/empty IPs
-                    def passwordMap = env.WINDOWS_PASSWORDS.split(',').collectEntries { entry ->
-                        def parts = entry.split(':')
-                        if (parts.size() == 2) {
-                            [(parts[0]): parts[1]]
-                        } else {
-                            [:] // Ignore invalid entries
-                        }
-                    }
+                    def ipList = env.WINDOWS_IPS.split(',').findAll { it?.trim() }
+                    def passwords = [:]
+                    def tempPasswordFile = "decrypted_passwords.txt"
 
                     for (ip in ipList) {
-                        if (!passwordMap.containsKey(ip)) {
-                            echo "WARNING: Password for ${ip} not found! Skipping..."
+                        echo "Decrypting password for ${ip}..."
+
+                        def instanceId = powershell(returnStdout: true, script: """
+                            aws ec2 describe-instances --filters "Name=ip-address,Values=${ip}" --query "Reservations[*].Instances[*].InstanceId" --output text --region us-east-1
+                        """).trim()
+
+                        def encryptedPassword = powershell(returnStdout: true, script: """
+                            aws ec2 get-password-data --instance-id "${instanceId}" --query 'PasswordData' --output text --region us-east-1
+                        """).trim()
+
+                        if (!encryptedPassword || encryptedPassword == "None") {
+                            echo "WARNING: Failed to retrieve encrypted password for ${ip}. Skipping..."
                             continue
                         }
 
-                        def password = passwordMap[ip]
+                        def decryptedPassword = powershell(returnStdout: true, script: """
+                            \$privateKeyPath = '${JENKINS_CREDENTIALS_FILE_WINDOWS_PRIVATE_KEY}'
+                            \$decryptedPassword = echo '${encryptedPassword}' | openssl base64 -d -A | openssl pkeyutl -decrypt -inkey \$privateKeyPath
+                            Write-Output \$decryptedPassword
+                        """).trim()
 
-                        echo "Executing scripts on ${ip} using WinRM..."
-
-                        def result = powershell(returnStatus: true, script: """
-                            \$username = '${ADMIN_USERNAME}'
-                            \$password = ConvertTo-SecureString '${password}' -AsPlainText -Force
-                            \$cred = New-Object System.Management.Automation.PSCredential (\$username, \$password)
-
-                            Invoke-Command -ComputerName ${ip} -Credential \$cred -ScriptBlock {
-                                Copy-Item -Path .\\ConfigureRemotingForAnsible.ps1 -Destination C:\\Windows\\Temp\\ConfigureRemotingForAnsible.ps1 -Force
-                                Copy-Item -Path .\\Create_user.ps1 -Destination C:\\Windows\\Temp\\Create_user.ps1 -Force
-                                
-                                Write-Output "Executing ConfigureRemotingForAnsible.ps1..."
-                                & C:\\Windows\\Temp\\ConfigureRemotingForAnsible.ps1
-
-                                Write-Output "Executing Create_user.ps1..."
-                                & C:\\Windows\\Temp\\Create_user.ps1
-                            }
-                        """)
-
-                        if (result != 0) {
-                            error "Execution failed on ${ip}"
+                        if (!decryptedPassword) {
+                            echo "WARNING: Failed to decrypt password for ${ip}. Skipping..."
+                            continue
                         }
 
-                        echo "Scripts executed successfully on ${ip}!"
+                        passwords[ip] = decryptedPassword
                     }
+
+                    // Store passwords in a temporary file
+                    writeFile file: tempPasswordFile, text: passwords.collect { k, v -> "${k}:${v}" }.join('\n')
+
+                    echo "Decryption complete! Passwords saved to ${tempPasswordFile}"
                 }
             }
-        
+        }
+
+            stage('Execute Scripts on Windows VMs') {
+                steps {
+                    script {
+                        def ipList = env.WINDOWS_IPS.split(',').findAll { it?.trim() }
+                        def tempPasswordFile = "decrypted_passwords.txt"
+
+                        // Read passwords from the temporary file
+                        def passwordMap = [:]
+                        if (fileExists(tempPasswordFile)) {
+                            def passwordContent = readFile(tempPasswordFile).trim()
+                            passwordMap = passwordContent.split('\n').collectEntries { line ->
+                                def parts = line.split(':')
+                                if (parts.size() == 2) {
+                                    [(parts[0]): parts[1]]
+                                } else {
+                                    [:] // Ignore invalid entries
+                                }
+                            }
+                        }
+
+                        for (ip in ipList) {
+                            if (!passwordMap.containsKey(ip)) {
+                                echo "WARNING: Password for ${ip} not found! Skipping..."
+                                continue
+                            }
+
+                            def password = passwordMap[ip]
+
+                            echo "Executing scripts on ${ip} using WinRM..."
+
+                            def result = powershell(returnStatus: true, script: """
+                                \$username = '${ADMIN_USERNAME}'
+                                \$password = ConvertTo-SecureString '${password}' -AsPlainText -Force
+                                \$cred = New-Object System.Management.Automation.PSCredential (\$username, \$password)
+
+                                Invoke-Command -ComputerName ${ip} -Credential \$cred -ScriptBlock {
+                                    Copy-Item -Path .\\ConfigureRemotingForAnsible.ps1 -Destination C:\\Windows\\Temp\\ConfigureRemotingForAnsible.ps1 -Force
+                                    Copy-Item -Path .\\Create_user.ps1 -Destination C:\\Windows\\Temp\\Create_user.ps1 -Force
+                                    
+                                    Write-Output "Executing ConfigureRemotingForAnsible.ps1..."
+                                    & C:\\Windows\\Temp\\ConfigureRemotingForAnsible.ps1
+
+                                    Write-Output "Executing Create_user.ps1..."
+                                    & C:\\Windows\\Temp\\Create_user.ps1
+                                }
+                            """)
+
+                            if (result != 0) {
+                                error "Execution failed on ${ip}"
+                            }
+
+                            echo "Scripts executed successfully on ${ip}!"
+                        }
+                    }
+                }
 
                 }
             }
