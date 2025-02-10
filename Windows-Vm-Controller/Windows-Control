@@ -73,6 +73,8 @@ stage('Decrypt Windows Passwords') {
                         aws ec2 get-password-data --instance-id "${instanceId}" --query 'PasswordData' --output text --region us-east-1
                     """).trim()
 
+                    echo "encryptedPassword = ${encryptedPassword}"
+
                     if (!encryptedPassword || encryptedPassword == "None") {
                         echo "WARNING: Failed to retrieve encrypted password for ${ip}. Skipping..."
                         continue
