@@ -37,6 +37,20 @@ pipeline {
                 }
             }
         }
+
+        stage('Download Scripts from S3') {
+            steps {
+                script {
+                    echo "Downloading scripts from S3..."
+
+                    bat "\"C:\\Program Files\\Git\\bin\\bash.exe\" -c 'AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} aws s3 cp ${S3_SCRIPT_PATH}/ConfigureRemotingForAnsible.ps1 ./'"
+                    bat "\"C:\\Program Files\\Git\\bin\\bash.exe\" -c 'AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} aws s3 cp ${S3_SCRIPT_PATH}/Create_user.ps1 ./'"
+                    
+                    echo "Scripts downloaded successfully!"
+                }
+            }
+        }
+
         stage('Decrypt Windows Passwords') {
             steps {
                 script {
@@ -61,20 +75,7 @@ pipeline {
                 }
             }
         }
-
-        stage('Download Scripts from S3') {
-            steps {
-                script {
-                    echo "Downloading scripts from S3..."
-
-                    bat "\"C:\\Program Files\\Git\\bin\\bash.exe\" -c 'AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} aws s3 cp ${S3_SCRIPT_PATH}/ConfigureRemotingForAnsible.ps1 ./'"
-                    bat "\"C:\\Program Files\\Git\\bin\\bash.exe\" -c 'AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} aws s3 cp ${S3_SCRIPT_PATH}/Create_user.ps1 ./'"
-                    
-                    echo "Scripts downloaded successfully!"
-                }
-            }
-        }
-
+        
         stage('Execute Scripts on Windows VMs') {
             steps {
                 script {
