@@ -54,14 +54,15 @@ pipeline {
         stage('Decrypt Windows Passwords') {
             steps {
                 script {
-                    def ipList = env.WINDOWS_IPS.split(' ')
+                    def ipList = env.WINDOWS_IPS.split(',')
                     def passwords = [:]
 
                     for (ip in ipList) {
                         echo "Decrypting password for ${ip}..."
-                        
+
                         def password = powershell(returnStdout: true, script: """
-                            aws ec2 get-password-data --instance-id "\$(aws ec2 describe-instances --filters "Name=ip-address,Values=${ip}" --query "Reservations[*].Instances[*].InstanceId" --output text)" --priv-key C:/Ansible-keys/terraformkeypair.pem --query 'PasswordData' --output text
+                            \$instanceId = aws ec2 describe-instances --filters "Name=ip-address,Values=${ip}" --query "Reservations[*].Instances[*].InstanceId" --output text --region us-east-1
+                            aws ec2 get-password-data --instance-id "\$instanceId" --priv-key C:/Ansible-keys/terraformkeypair.pem --query 'PasswordData' --output text --region us-east-1
                         """).trim()
 
                         if (!password) {
@@ -75,7 +76,8 @@ pipeline {
                 }
             }
         }
-        
+
+
         stage('Execute Scripts on Windows VMs') {
             steps {
                 script {
