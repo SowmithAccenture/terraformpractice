@@ -103,20 +103,41 @@ pipeline {
 stage('Configure TrustedHosts for WinRM') {
     steps {
         script {
-            def ipList = env.WINDOWS_IPS.split(',').findAll { it?.trim() }
+            def ipList = env.WINDOWS_IPS?.split(',')?.findAll { it?.trim() } ?: []
+            def passwordMap = env.WINDOWS_PASSWORDS?.split(',')?.collectEntries { entry ->
+                def parts = entry.split(':')
+                if (parts.size() == 2) {
+                    return [(parts[0]): parts[1]]
+                } else {
+                    return [:]  // Skip invalid entries
+                }
+            } ?: [:]
+
             for (ip in ipList) {
                 echo "Configuring TrustedHosts on ${ip}..."
-                
-                powershell """
-                    Invoke-Command -ComputerName ${ip} -ScriptBlock {
+
+                def password = passwordMap[ip]
+                if (!password) {
+                    error "Password for ${ip} not found!"
+                }
+
+                def result = powershell(returnStatus: true, script: """
+                    \$adminCreds = New-Object System.Management.Automation.PSCredential('${ADMIN_USERNAME}', (ConvertTo-SecureString '${password}' -AsPlainText -Force))
+
+                    Invoke-Command -ComputerName ${ip} -Credential \$adminCreds -ScriptBlock {
                         Set-Item WSMan:\\localhost\\Client\\TrustedHosts -Value '*' -Force
                         Restart-Service WinRM
-                    } -Credential (New-Object PSCredential 'Administrator', (ConvertTo-SecureString '${password}' -AsPlainText -Force))
-                """
+                    }
+                """)
+
+                if (result != 0) {
+                    error "Failed to configure TrustedHosts on ${ip}"
+                }
             }
         }
     }
 }
+
 
            stage('Execute Scripts on Windows VMs') {
     steps {
