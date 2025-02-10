@@ -63,56 +63,64 @@ stage('Decrypt Windows Passwords') {
                 writeFile file: privateKeyFile, text: readFile(PRIVATE_KEY)
 
                 for (ip in ipList) {
-                    echo "Decrypting password for ${ip}..."
+                    echo "🔑 Decrypting password for ${ip}..."
 
+                    // Get instance ID based on IP address
                     def instanceId = powershell(returnStdout: true, script: """
                         aws ec2 describe-instances --filters "Name=ip-address,Values=${ip}" --query "Reservations[*].Instances[*].InstanceId" --output text --region us-east-1
                     """).trim()
 
+                    if (!instanceId) {
+                        echo "⚠️ WARNING: Could not find instance ID for ${ip}. Skipping..."
+                        continue
+                    }
+
+                    echo "🆔 Instance ID for ${ip}: ${instanceId}"
+
+                    // Get encrypted password
                     def encryptedPassword = powershell(returnStdout: true, script: """
-                        aws ec2 get-password-data --instance-id "${instanceId}" --query 'PasswordData' --output text --region us-east-1
+                        aws ec2 get-password-data --instance-id "${instanceId}" --priv-launch-key C:\\Ansible-Keys\\terraformkeypair.pem --query 'PasswordData' --output text --region us-east-1
                     """).trim()
-
-                    echo "encryptedPassword = ${encryptedPassword}"
-
+                    echo "encrypted = ${encryptedPassword}"
                     if (!encryptedPassword || encryptedPassword == "None") {
-                        echo "WARNING: Failed to retrieve encrypted password for ${ip}. Skipping..."
+                        echo "⚠️ WARNING: Failed to retrieve encrypted password for ${ip}. Skipping..."
                         continue
                     }
 
-                    // Securely decrypt password
+                    echo "🔐 Encrypted Password Retrieved for ${ip}"
+
+                    // Decrypt the password
                     def decryptedPassword = powershell(returnStdout: true, script: """
-                        \$EncryptedPassword = "${encryptedPassword}" -replace '\\r','' -replace '\\n',''
-                        \$Decoded = [System.Convert]::FromBase64String(\$EncryptedPassword)
-                        \$PrivateKey = Get-Content -Path "${privateKeyFile}" -Raw
-                        \$DecryptedPassword = [System.Text.Encoding]::UTF8.GetString(\$Decoded) | openssl pkeyutl -decrypt -inkey "${privateKeyFile}"
-                        Write-Output \$DecryptedPassword
+                        openssl pkeyutl -decrypt -inkey C:\\Ansible-Keys\\terraformkeypair.pem -in <(echo ${encryptedPassword} | base64 --decode)
                     """).trim()
-                    echo "decryptedpasswor = ${decryptedPassword}"
+                    echo "decrypted : ${decryptedPassword}"
                     if (!decryptedPassword) {
-                        echo "WARNING: Failed to decrypt password for ${ip}. Skipping..."
+                        echo "⚠️ WARNING: Failed to decrypt password for ${ip}. Skipping..."
                         continue
                     }
+
+                    echo "✅ Successfully decrypted password for ${ip}"
 
                     passwordEntries.add("${ip}:${decryptedPassword}")
                 }
 
-                // Remove temporary private key
+                // Remove temporary private key file
                 powershell(script: "Remove-Item -Path '${privateKeyFile}' -Force")
 
                 if (passwordEntries.isEmpty()) {
-                    error "No passwords were successfully decrypted. Exiting..."
+                    error "❌ No passwords were successfully decrypted. Exiting..."
                 }
 
                 // Store decrypted passwords in a temporary file (avoiding serialization issues)
                 def passwordFile = "${WORKSPACE}\\decrypted_passwords.txt"
                 writeFile file: passwordFile, text: passwordEntries.join('\n')
 
-                echo "Decryption complete! Passwords stored in ${passwordFile}"
+                echo "✅ Decryption complete! Passwords stored in ${passwordFile}"
             }
         }
     }
 }
+
 
 stage('Enable WinRM & Configure TrustedHosts') {
     steps {
