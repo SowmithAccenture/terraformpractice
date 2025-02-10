@@ -75,9 +75,13 @@ pipeline {
                         continue
                     }
 
-                    // Decrypt password using the private key from Jenkins credentials
-                    def decryptedPassword = sh(returnStdout: true, script: """
-                        echo '${encryptedPassword}' | base64 -d | openssl pkeyutl -decrypt -inkey ${PRIVATE_KEY_PATH}
+                    // Decrypt password using PowerShell with secure private key handling
+                    def decryptedPassword = powershell(returnStdout: true, script: """
+                        \$EncryptedPassword = "${encryptedPassword}" -replace '\r','' -replace '\n',''
+                        \$Decoded = [System.Convert]::FromBase64String(\$EncryptedPassword)
+                        \$PrivateKey = Get-Content -Path "${PRIVATE_KEY_PATH}" -Raw
+                        \$DecryptedPassword = [System.Text.Encoding]::UTF8.GetString(\$Decoded) | openssl pkeyutl -decrypt -inkey "${PRIVATE_KEY_PATH}"
+                        Write-Output \$DecryptedPassword
                     """).trim()
 
                     if (!decryptedPassword) {
@@ -96,7 +100,6 @@ pipeline {
         }
     }
 }
-
 
            stage('Execute Scripts on Windows VMs') {
     steps {
