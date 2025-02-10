@@ -56,7 +56,7 @@ stage('Decrypt Windows Passwords') {
         script {
             withCredentials([file(credentialsId: 'windows-private-key', variable: 'PRIVATE_KEY')]) {
                 def ipList = env.WINDOWS_IPS?.split(',')?.findAll { it?.trim() } ?: []
-                def passwords = [:]
+                def passwordEntries = []
 
                 // Create a temporary private key file
                 def privateKeyFile = "${WORKSPACE}\\private_key.pem"
@@ -78,7 +78,7 @@ stage('Decrypt Windows Passwords') {
                         continue
                     }
 
-                    // Securely decrypt the password using the temporary private key file in PowerShell
+                    // Securely decrypt password
                     def decryptedPassword = powershell(returnStdout: true, script: """
                         \$EncryptedPassword = "${encryptedPassword}" -replace '\\r','' -replace '\\n',''
                         \$Decoded = [System.Convert]::FromBase64String(\$EncryptedPassword)
@@ -92,20 +92,21 @@ stage('Decrypt Windows Passwords') {
                         continue
                     }
 
-                    passwords[ip] = decryptedPassword
+                    passwordEntries.add("${ip}:${decryptedPassword}")
                 }
 
-                // Cleanup temporary private key file
+                // Remove temporary private key
                 powershell(script: "Remove-Item -Path '${privateKeyFile}' -Force")
 
-                if (passwords.isEmpty()) {
+                if (passwordEntries.isEmpty()) {
                     error "No passwords were successfully decrypted. Exiting..."
                 }
 
-                // Convert passwords map to a string and store in an environment variable
-                env.WINDOWS_PASSWORDS = passwords.collect { k, v -> "${k}:${v}" }.join(',')
+                // Store decrypted passwords in a temporary file (avoiding serialization issues)
+                def passwordFile = "${WORKSPACE}\\decrypted_passwords.txt"
+                writeFile file: passwordFile, text: passwordEntries.join('\n')
 
-                echo "Decryption complete! Passwords securely stored."
+                echo "Decryption complete! Passwords stored in ${passwordFile}"
             }
         }
     }
@@ -115,14 +116,17 @@ stage('Configure TrustedHosts for WinRM') {
     steps {
         script {
             def ipList = env.WINDOWS_IPS?.split(',')?.findAll { it?.trim() } ?: []
-            def passwordMap = env.WINDOWS_PASSWORDS?.split(',')?.collectEntries { entry ->
-                def parts = entry.split(':')
+            def passwordFile = "${WORKSPACE}\\decrypted_passwords.txt"
+
+            // Read passwords from file (avoiding serialization issues)
+            def passwordMap = [:]
+            def passwordLines = readFile(passwordFile).split('\n')
+            passwordLines.each { line ->
+                def parts = line.split(':', 2)
                 if (parts.size() == 2) {
-                    return [(parts[0]): parts[1]]
-                } else {
-                    return [:]  // Skip invalid entries
+                    passwordMap[parts[0]] = parts[1]
                 }
-            } ?: [:]
+            }
 
             for (ip in ipList) {
                 echo "Configuring TrustedHosts on ${ip}..."
@@ -148,7 +152,6 @@ stage('Configure TrustedHosts for WinRM') {
         }
     }
 }
-
 
 
 
