@@ -102,35 +102,45 @@ pipeline {
         }
 
 
-                stage('Execute Scripts on Windows VMs') {
-                    steps {
-                        script {
-                            def ipList = env.WINDOWS_IPS.split(',')
-                            def passwordMap = env.WINDOWS_PASSWORDS.split(',').collectEntries { entry -> 
-                                def (ip, pass) = entry.split(':')
-                                [(ip): pass]
-                            }
+        stage('Execute Scripts on Windows VMs') {
+                        steps {
+                            script {
+                                def ipList = env.WINDOWS_IPS.split(',')
+                                def passwords = [:]
 
-                            for (ip in ipList) {
-                                echo "Connecting to ${ip} using WinRM..."
-
-                                def password = passwordMap[ip]
-
-                                def result = powershell(returnStatus: true, script: """
-                                    Invoke-Command -ComputerName ${ip} -Credential (New-Object System.Management.Automation.PSCredential('${ADMIN_USERNAME}', (ConvertTo-SecureString '${password}' -AsPlainText -Force))) -ScriptBlock {
-                                        Copy-Item -Path .\\ConfigureRemotingForAnsible.ps1 -Destination C:\\Windows\\Temp\\ConfigureRemotingForAnsible.ps1
-                                        Copy-Item -Path .\\Create_user.ps1 -Destination C:\\Windows\\Temp\\Create_user.ps1
-                                        & C:\\Windows\\Temp\\ConfigureRemotingForAnsible.ps1
-                                        & C:\\Windows\\Temp\\Create_user.ps1
+                                for (ip in ipList) {
+                                    // Get password dynamically (avoid storing in env variables)
+                                    def decryptedPassword = passwords[ip]
+                                    if (!decryptedPassword) {
+                                        error "Password for ${ip} not found!"
                                     }
-                                """)
 
-                                if (result != 0) {
-                                    error "Execution failed on ${ip}"
+                                    echo "Executing scripts on ${ip}..."
+
+                                    def winRMResult = powershell(returnStatus: true, script: """
+                                        \$securePassword = ConvertTo-SecureString '${decryptedPassword}' -AsPlainText -Force
+                                        \$cred = New-Object System.Management.Automation.PSCredential ('${ADMIN_USERNAME}', \$securePassword)
+
+                                        Invoke-Command -ComputerName ${ip} -Credential \$cred -ScriptBlock {
+                                            # Copy scripts to Windows VM
+                                            Copy-Item -Path .\\ConfigureRemotingForAnsible.ps1 -Destination C:\\Windows\\Temp\\ConfigureRemotingForAnsible.ps1 -Force
+                                            Copy-Item -Path .\\Create_user.ps1 -Destination C:\\Windows\\Temp\\Create_user.ps1 -Force
+
+                                            # Execute the scripts
+                                            & C:\\Windows\\Temp\\ConfigureRemotingForAnsible.ps1
+                                            & C:\\Windows\\Temp\\Create_user.ps1
+                                        }
+                                    """)
+
+                                    if (winRMResult != 0) {
+                                        error "Script execution failed on ${ip}!"
+                                    }
+
+                                    echo "Scripts executed successfully on ${ip}!"
                                 }
                             }
-                        }
-                    }
+                        }                   
+
                 }
             }
 
