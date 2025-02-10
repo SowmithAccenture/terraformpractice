@@ -58,7 +58,7 @@ pipeline {
                     def passwords = [:]
 
                     // Retrieve the private key from Jenkins credentials and save it to a temporary file
-                    withCredentials([file(credentialsId: 'windows-decryption-key', variable: 'PRIVATE_KEY_PATH')]) {
+                    withCredentials([file(credentialsId: 'windows-private-key', variable: 'PRIVATE_KEY_PATH')]) {
                         for (ip in ipList) {
                             echo "Decrypting password for ${ip}..."
 
