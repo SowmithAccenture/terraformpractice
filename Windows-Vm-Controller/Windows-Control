@@ -79,7 +79,7 @@ stage('Decrypt Windows Passwords') {
 
                     // Get encrypted password
                     def encryptedPassword = powershell(returnStdout: true, script: """
-                        aws ec2 get-password-data --instance-id "${instanceId}" --priv-launch-key C:\\Ansible-Keys\\terraformkeypair.pem --query 'PasswordData' --output text --region us-east-1
+                        aws ec2 get-password-data --instance-id "${instanceId}" --priv-launch-key C:\Ansible-Keys\terraformkeypair.pem --query 'PasswordData' --output text --region us-east-1
                     """).trim()
                     echo "encrypted = ${encryptedPassword}"
                     if (!encryptedPassword || encryptedPassword == "None") {
@@ -91,7 +91,7 @@ stage('Decrypt Windows Passwords') {
 
                     // Decrypt the password
                     def decryptedPassword = powershell(returnStdout: true, script: """
-                        openssl pkeyutl -decrypt -inkey C:\\Ansible-Keys\\terraformkeypair.pem -in <(echo ${encryptedPassword} | base64 --decode)
+                        openssl pkeyutl -decrypt -inkey C:\Ansible-Keys\terraformkeypair.pem -in <(echo ${encryptedPassword} | base64 --decode)
                     """).trim()
                     echo "decrypted : ${decryptedPassword}"
                     if (!decryptedPassword) {
