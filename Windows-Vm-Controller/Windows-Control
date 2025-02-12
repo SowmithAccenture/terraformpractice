@@ -56,7 +56,7 @@ stage('Decrypt Windows Passwords') {
         script {
             echo "Starting Windows password decryption..."
 
-            def privateKeyFile = "C:\\\\Ansible-Keys\\\\terraformkeypair.pem"
+            def privateKeyFile = "C:/Ansible-Keys/terraformkeypair.pem"
             def passwordEntries = []
             def ipList = env.WINDOWS_IPS?.split(',')?.findAll { it?.trim() } ?: []
 
@@ -78,7 +78,7 @@ stage('Decrypt Windows Passwords') {
                 echo "Decrypting password for ${ip}..."
 
                 bat """
-                    "C:\\Program Files\\Git\\bin\\bash.exe" -c 'aws ec2 get-password-data --instance-id ${instanceId} --priv-launch-key ${privateKeyFile} --query "PasswordData" --output text --region us-east-1' > password.txt
+                    "C:\\Program Files\\Git\\bin\\bash.exe" -c 'aws ec2 get-password-data --instance-id i-078ba116592c4c258 --priv-launch-key ${privateKeyFile} --query "PasswordData" --output text --region us-east-1' > password.txt
                 """
 
                 def decryptedPassword = readFile('password.txt').trim()
