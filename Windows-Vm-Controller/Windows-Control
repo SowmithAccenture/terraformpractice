@@ -56,7 +56,7 @@ stage('Decrypt Windows Passwords') {
         script {
             echo "Starting Windows password decryption..."
 
-            def privateKeyFile = "C:/Ansible-Keys/terraformkeypair.pem"
+            def privateKeyFile = "C:\\\\Ansible-Keys\\\\terraformkeypair.pem"
             def passwordEntries = []
             def ipList = env.WINDOWS_IPS?.split(',')?.findAll { it?.trim() } ?: []
 
