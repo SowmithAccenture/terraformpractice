@@ -75,7 +75,7 @@ stage('Decrypt Windows Passwords') {
 
                 // Run AWS command to get decrypted password
                 def decryptedPassword = powershell(returnStdout: true, script: """
-                    aws ec2 get-password-data --instance-id "${instanceId}" --priv-launch-key "${privateKeyFile}" --query 'PasswordData' --output text --region us-east-1
+                    aws ec2 get-password-data --instance-id ${instanceId} --priv-launch-key ${privateKeyFile} --query 'PasswordData' --output text --region us-east-1
                 """).trim()
 
                 if (!decryptedPassword || decryptedPassword == "None") {
