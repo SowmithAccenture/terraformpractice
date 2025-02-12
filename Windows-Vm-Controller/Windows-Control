@@ -54,29 +54,35 @@ pipeline {
 stage('Decrypt Windows Passwords') {
     steps {
         script {
-            def ipList = env.WINDOWS_IPS?.split(',')?.findAll { it?.trim() } ?: []
-            def passwordEntries = []
+            echo "Starting Windows password decryption..."
 
-            // Define private key file path directly
-            def privateKeyFile = "C:\Ansible-keys\terraformkeypair.pem"
+            def privateKeyFile = "C:\\Ansible-Keys\\terraformkeypair.pem"
+            def passwordEntries = []
+            def ipList = env.WINDOWS_IPS?.split(',')?.findAll { it?.trim() } ?: []
 
             for (ip in ipList) {
-                echo "Decrypting password for ${ip}..."
+                echo "Fetching instance ID for ${ip}..."
 
-                // Fetch instance ID based on IP
-                def instanceId = powershell(returnStdout: true, script: """
-                    aws ec2 describe-instances --filters "Name=ip-address,Values=${ip}" --query "Reservations[*].Instances[*].InstanceId" --output text --region us-east-1
-                """).trim()
+                bat """
+                    "C:\\Program Files\\Git\\bin\\bash.exe" -c 'aws ec2 describe-instances --filters "Name=ip-address,Values=${ip}" --query "Reservations[*].Instances[*].InstanceId" --output text --region us-east-1' > instance_id.txt
+                """
+
+                def instanceId = readFile('instance_id.txt').trim()
+                echo "Instance ID for ${ip}: ${instanceId}"
 
                 if (!instanceId) {
                     echo "WARNING: Instance ID for ${ip} not found. Skipping..."
                     continue
                 }
 
-                // Run AWS command to get decrypted password
-                def decryptedPassword = powershell(returnStdout: true, script: """
-                    aws ec2 get-password-data --instance-id ${instanceId} --priv-launch-key ${privateKeyFile} --query 'PasswordData' --output text --region us-east-1
-                """).trim()
+                echo "Decrypting password for ${ip}..."
+
+                bat """
+                    "C:\\Program Files\\Git\\bin\\bash.exe" -c 'aws ec2 get-password-data --instance-id ${instanceId} --priv-launch-key ${privateKeyFile} --query "PasswordData" --output text --region us-east-1' > password.txt
+                """
+
+                def decryptedPassword = readFile('password.txt').trim()
+                echo "Decrypted password for ${ip}: ${decryptedPassword}"
 
                 if (!decryptedPassword || decryptedPassword == "None") {
                     echo "WARNING: Failed to retrieve decrypted password for ${ip}. Skipping..."
@@ -90,7 +96,6 @@ stage('Decrypt Windows Passwords') {
                 error "No passwords were successfully decrypted. Exiting..."
             }
 
-            // Store decrypted passwords in a temporary file
             def passwordFile = "${WORKSPACE}\\decrypted_passwords.txt"
             writeFile file: passwordFile, text: passwordEntries.join('\n')
 
@@ -98,7 +103,6 @@ stage('Decrypt Windows Passwords') {
         }
     }
 }
-
 
 
 
