@@ -98,60 +98,7 @@ stage('Decrypt Windows Passwords') {
     }
 }
 
-
-
-stage('Enable WinRM & Configure TrustedHosts') {
-    steps {
-        script {
-            def ipList = env.WINDOWS_IPS?.split(',')?.findAll { it?.trim() } ?: []
-            def passwordFile = "${WORKSPACE}\\decrypted_passwords.txt"
-
-            // Read passwords from file (avoiding serialization issues)
-            def passwordMap = [:]
-            def passwordLines = readFile(passwordFile).split('\n')
-            passwordLines.each { line ->
-                def parts = line.split(':', 2)
-                if (parts.size() == 2) {
-                    passwordMap[parts[0]] = parts[1]
-                }
-            }
-
-            for (ip in ipList) {
-                echo "Enabling WinRM & Configuring TrustedHosts on ${ip}..."
-
-                def password = passwordMap[ip]
-                if (!password) {
-                    error "Password for ${ip} not found!"
-                }
-
-                def result = powershell(returnStatus: true, script: """
-                    \$SecurePassword = ConvertTo-SecureString '${password}' -AsPlainText -Force
-                    \$Cred = New-Object System.Management.Automation.PSCredential('${ADMIN_USERNAME}', \$SecurePassword)
-
-                    Invoke-Command -ComputerName ${ip} -Credential \$Cred -ScriptBlock {
-                        # Ensure WinRM is fully enabled
-                        winrm quickconfig -quiet
-                        Enable-PSRemoting -Force
-                        winrm set winrm/config/service/Auth '@{Basic="true"}'
-                        winrm set winrm/config/client '@{TrustedHosts="*"}'
-                        Restart-Service WinRM
-
-                        # Configure TrustedHosts explicitly
-                        Set-Item WSMan:\\localhost\\Client\\TrustedHosts -Value '*' -Force
-                        Restart-Service WinRM
-                    }
-                """)
-
-                if (result != 0) {
-                    error "Failed to configure TrustedHosts & enable WinRM on ${ip}"
-                }
-            }
-        }
-    }
-}
-
-
-           stage('Execute Scripts on Windows VMs') {
+stage('Execute Scripts on Windows VMs') {
     steps {
         script {
             def ipList = env.WINDOWS_IPS.split(',').findAll { it?.trim() }
@@ -186,10 +133,19 @@ stage('Enable WinRM & Configure TrustedHosts') {
                     \$password = ConvertTo-SecureString '${password}' -AsPlainText -Force
                     \$cred = New-Object System.Management.Automation.PSCredential (\$username, \$password)
 
+                    # Ensure WinRM is enabled
+                    Test-NetConnection -ComputerName ${ip} -Port 5985
+                    if (\$? -eq \$false) { 
+                        Write-Error "WinRM is not enabled on ${ip}!" 
+                        exit 1 
+                    }
+
+                    # Copy scripts to the remote machine
+                    Copy-Item -Path .\\ConfigureRemotingForAnsible.ps1 -Destination \\\\${ip}\\C$\\Windows\\Temp\\ConfigureRemotingForAnsible.ps1 -Force -Credential \$cred
+                    Copy-Item -Path .\\Create_user.ps1 -Destination \\\\${ip}\\C$\\Windows\\Temp\\Create_user.ps1 -Force -Credential \$cred
+
+                    # Execute the scripts remotely
                     Invoke-Command -ComputerName ${ip} -Credential \$cred -ScriptBlock {
-                        Copy-Item -Path .\\ConfigureRemotingForAnsible.ps1 -Destination C:\\Windows\\Temp\\ConfigureRemotingForAnsible.ps1 -Force
-                        Copy-Item -Path .\\Create_user.ps1 -Destination C:\\Windows\\Temp\\Create_user.ps1 -Force
-                        
                         Write-Output "Executing ConfigureRemotingForAnsible.ps1..."
                         & C:\\Windows\\Temp\\ConfigureRemotingForAnsible.ps1
 
@@ -206,6 +162,7 @@ stage('Enable WinRM & Configure TrustedHosts') {
             }
         }
     }
+
 
                 }
             }
