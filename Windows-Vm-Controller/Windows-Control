@@ -119,22 +119,23 @@ pipeline {
 
                         echo "Creating remote PowerShell script for ${ip}..."
 
-                        def psScript = """
-                            \$username = 'Administrator'
-                            \$password = ConvertTo-SecureString '${password}' -AsPlainText -Force
-                            \$cred = New-Object System.Management.Automation.PSCredential (\$username, \$password)
+                       def psScript = """
+                        \$username = 'Administrator'
+                        \$password = ConvertTo-SecureString '${password}' -AsPlainText -Force
+                        \$cred = New-Object System.Management.Automation.PSCredential (\$username, \$password)
 
-                            Copy-Item -Path ConfigureRemotingForAnsible.ps1 -Destination \\\\${ip}\\C$\\Windows\\Temp\\ConfigureRemotingForAnsible.ps1 -Force -Credential \$cred
-                            Copy-Item -Path Create_user.ps1 -Destination \\\\${ip}\\C$\\Windows\\Temp\\Create_user.ps1 -Force -Credential \$cred
+                        Copy-Item -Path ConfigureRemotingForAnsible.ps1 -Destination '\\\\${ip}\\C\$\\Windows\\Temp\\ConfigureRemotingForAnsible.ps1' -Force -Credential \$cred
+                        Copy-Item -Path Create_user.ps1 -Destination '\\\\${ip}\\C\$\\Windows\\Temp\\Create_user.ps1' -Force -Credential \$cred
 
-                            Invoke-Command -ComputerName ${ip} -Credential \$cred -ScriptBlock {
-                                Write-Output "Executing ConfigureRemotingForAnsible.ps1..."
-                                & C:\\Windows\\Temp\\ConfigureRemotingForAnsible.ps1
+                        Invoke-Command -ComputerName ${ip} -Credential \$cred -ScriptBlock {
+                            Write-Output "Executing ConfigureRemotingForAnsible.ps1..."
+                            & C:\\Windows\\Temp\\ConfigureRemotingForAnsible.ps1
 
-                                Write-Output "Executing Create_user.ps1..."
-                                & C:\\Windows\\Temp\\Create_user.ps1
-                            }
-                        """
+                            Write-Output "Executing Create_user.ps1..."
+                            & C:\\Windows\\Temp\\Create_user.ps1
+                        }
+                    """
+
 
                         def scriptPath = "${WORKSPACE}\\${TEMP_POWERSHELL_SCRIPT}"
                         writeFile file: scriptPath, text: psScript
