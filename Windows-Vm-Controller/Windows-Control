@@ -99,73 +99,64 @@ stage('Decrypt Windows Passwords') {
 }
 
 stage('Execute Scripts on Windows VMs') {
-    steps {
-        script {
-            def ipList = env.WINDOWS_IPS.split(',').findAll { it?.trim() }
-            def tempPasswordFile = "decrypted_passwords.txt"
+            steps {
+                script {
+                    def ipList = env.WINDOWS_IPS.split(',').findAll { it?.trim() }
+                    def tempPasswordFile = "decrypted_passwords.txt"
 
-            // Read passwords from the temporary file
-            def passwordMap = [:]
-            if (fileExists(tempPasswordFile)) {
-                def passwordContent = readFile(tempPasswordFile).trim()
-                passwordMap = passwordContent.split('\n').collectEntries { line ->
-                    def parts = line.split(':')
-                    if (parts.size() == 2) {
-                        [(parts[0]): parts[1]]
-                    } else {
-                        [:] // Ignore invalid entries
-                    }
-                }
-            }
-
-            for (ip in ipList) {
-                if (!passwordMap.containsKey(ip)) {
-                    echo "WARNING: Password for ${ip} not found! Skipping..."
-                    continue
-                }
-
-                def password = passwordMap[ip]
-
-                echo "Executing scripts on ${ip} using WinRM..."
-
-                def result = powershell(returnStatus: true, script: """
-                    \$username = 'Administrator'
-                    \$password = ConvertTo-SecureString '${password}' -AsPlainText -Force
-                    \$cred = New-Object System.Management.Automation.PSCredential (\$username, \$password)
-
-                    # Ensure WinRM is enabled
-                    Test-NetConnection -ComputerName ${ip} -Port 5985
-                    if (\$? -eq \$false) { 
-                        Write-Error "WinRM is not enabled on ${ip}!" 
-                        exit 1 
+                    // Read passwords from the temporary file
+                    def passwordMap = [:]
+                    if (fileExists(tempPasswordFile)) {
+                        def passwordContent = readFile(tempPasswordFile).trim()
+                        passwordMap = passwordContent.split('\n').collectEntries { line ->
+                            def parts = line.split(':')
+                            if (parts.size() == 2) {
+                                [(parts[0]): parts[1]]
+                            } else {
+                                [:] // Ignore invalid entries
+                            }
+                        }
                     }
 
-                    # Copy scripts to the remote machine
-                    Copy-Item -Path .\\ConfigureRemotingForAnsible.ps1 -Destination \\\\${ip}\\C$\\Windows\\Temp\\ConfigureRemotingForAnsible.ps1 -Force -Credential \$cred
-                    Copy-Item -Path .\\Create_user.ps1 -Destination \\\\${ip}\\C$\\Windows\\Temp\\Create_user.ps1 -Force -Credential \$cred
+                    for (ip in ipList) {
+                        if (!passwordMap.containsKey(ip)) {
+                            echo "WARNING: Password for ${ip} not found! Skipping..."
+                            continue
+                        }
 
-                    # Execute the scripts remotely
-                    Invoke-Command -ComputerName ${ip} -Credential \$cred -ScriptBlock {
-                        Write-Output "Executing ConfigureRemotingForAnsible.ps1..."
-                        & C:\\Windows\\Temp\\ConfigureRemotingForAnsible.ps1
+                        def password = passwordMap[ip]
 
-                        Write-Output "Executing Create_user.ps1..."
-                        & C:\\Windows\\Temp\\Create_user.ps1
+                        echo "Executing scripts on ${ip} using WinRM..."
+
+                        def result = powershell(returnStatus: true, script: """
+                            \$username = 'Administrator'
+                            \$password = ConvertTo-SecureString '${password}' -AsPlainText -Force
+                            \$cred = New-Object System.Management.Automation.PSCredential (\$username, \$password)
+
+                            Invoke-Command -ComputerName ${ip} -Credential \$cred -ScriptBlock {
+                                Copy-Item -Path .\\ConfigureRemotingForAnsible.ps1 -Destination C`$\\Windows\\Temp\\ConfigureRemotingForAnsible.ps1 -Force
+                                Copy-Item -Path .\\Create_user.ps1 -Destination C`$\\Windows\\Temp\\Create_user.ps1 -Force
+                                
+                                Write-Output "Executing ConfigureRemotingForAnsible.ps1..."
+                                & C:\\Windows\\Temp\\ConfigureRemotingForAnsible.ps1
+
+                                Write-Output "Executing Create_user.ps1..."
+                                & C:\\Windows\\Temp\\Create_user.ps1
+                            }
+                        """)
+
+                        if (result != 0) {
+                            error "Execution failed on ${ip}"
+                        }
+
+                        echo "Scripts executed successfully on ${ip}!"
                     }
-                """)
-
-                if (result != 0) {
-                    error "Execution failed on ${ip}"
                 }
-
-                echo "Scripts executed successfully on ${ip}!"
             }
         }
     }
-
-
-                }
-            }
+               
+            
 
             post {
                 failure {
