@@ -51,7 +51,7 @@ pipeline {
             }
         }
 
-sstage('Decrypt Windows Passwords') {
+stage('Decrypt Windows Passwords') {
     steps {
         withCredentials([file(credentialsId: 'windows-private-key', variable: 'PRIVATE_KEY_PATH')]) {
             script {
