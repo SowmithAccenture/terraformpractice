@@ -9,16 +9,15 @@ pipeline {
         S3_SCRIPT_PATH = "s3://my-terraform-state-bucket-425"
         ADMIN_USERNAME = "Administrator"
         GIT_BASH = "C:\\Program Files\\Git\\bin\\bash.exe"
+        TEMP_POWERSHELL_SCRIPT = "remote_script.ps1"
     }
 
     stages {
         stage('Get Windows Instance IPs from Terraform State') {
             steps {
                 script {
-                    // Fetch latest Terraform state file from S3
                     bat "\"${GIT_BASH}\" -c 'AWS_ACCESS_KEY_ID=${env.AWS_ACCESS_KEY_ID} AWS_SECRET_ACCESS_KEY=${env.AWS_SECRET_ACCESS_KEY} aws s3 cp s3://${TF_STATE_BUCKET}/${TF_STATE_KEY} terraform.tfstate'"
 
-                    // Extract only Windows VM public IPs from Terraform state
                     def windowsIPs = powershell(returnStdout: true, script: """
                         \$tfState = Get-Content terraform.tfstate -Raw | ConvertFrom-Json
                         \$windowsIPs = \$tfState.resources | Where-Object { \$_.'type' -eq 'aws_instance' -and \$_.'name' -match 'windows' } | 
@@ -31,8 +30,6 @@ pipeline {
                     }
 
                     echo "Windows VM IPs: ${windowsIPs}"
-
-                    // Store IPs as an environment variable
                     env.WINDOWS_IPS = windowsIPs
                 }
             }
@@ -42,10 +39,8 @@ pipeline {
             steps {
                 script {
                     echo "Downloading scripts from S3..."
-
-                    bat "\"C:\\Program Files\\Git\\bin\\bash.exe\" -c 'AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} aws s3 cp ${S3_SCRIPT_PATH}/ConfigureRemotingForAnsible.ps1 ./'"
-                    bat "\"C:\\Program Files\\Git\\bin\\bash.exe\" -c 'AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} aws s3 cp ${S3_SCRIPT_PATH}/Create_user.ps1 ./'"
-                    
+                    bat "\"${GIT_BASH}\" -c 'AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} aws s3 cp ${S3_SCRIPT_PATH}/ConfigureRemotingForAnsible.ps1 ./'"
+                    bat "\"${GIT_BASH}\" -c 'AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} aws s3 cp ${S3_SCRIPT_PATH}/Create_user.ps1 ./'"
                     echo "Scripts downloaded successfully!"
                 }
             }
@@ -61,7 +56,6 @@ pipeline {
                         for (ip in ipList) {
                             echo "Decrypting password for ${ip}..."
 
-                            // Fetch instance ID based on IP
                             def instanceId = powershell(returnStdout: true, script: """
                                 aws ec2 describe-instances --filters "Name=ip-address,Values=${ip}" --query "Reservations[*].Instances[*].InstanceId" --output text --region us-east-1
                             """).trim()
@@ -71,7 +65,6 @@ pipeline {
                                 continue
                             }
 
-                            // Run AWS command to get decrypted password
                             def decryptedPassword = powershell(returnStdout: true, script: """
                                 aws ec2 get-password-data --instance-id ${instanceId} --priv-launch-key ${PRIVATE_KEY_PATH} --query 'PasswordData' --output text --region us-east-1
                             """).trim()
@@ -88,10 +81,8 @@ pipeline {
                             error "No passwords were successfully decrypted. Exiting..."
                         }
 
-                        // Store decrypted passwords in a temporary file
                         def passwordFile = "${WORKSPACE}\\decrypted_passwords.txt"
                         writeFile file: passwordFile, text: passwordEntries.join('\n')
-
                         echo "Decryption complete! Passwords stored in ${passwordFile}"
                     }
                 }
@@ -113,7 +104,7 @@ pipeline {
                             if (parts.size() == 2) {
                                 [(parts[0]): parts[1]]
                             } else {
-                                [:] // Ignore invalid entries
+                                [:]
                             }
                         }
                     }
@@ -126,23 +117,31 @@ pipeline {
 
                         def password = passwordMap[ip]
 
-                        echo "Executing scripts on ${ip} using WinRM..."
+                        echo "Creating remote PowerShell script for ${ip}..."
 
-                        def result = powershell(returnStatus: true, script: """
+                        def psScript = """
                             \$username = 'Administrator'
                             \$password = ConvertTo-SecureString '${password}' -AsPlainText -Force
                             \$cred = New-Object System.Management.Automation.PSCredential (\$username, \$password)
 
+                            Copy-Item -Path ConfigureRemotingForAnsible.ps1 -Destination \\\\${ip}\\C$\\Windows\\Temp\\ConfigureRemotingForAnsible.ps1 -Force -Credential \$cred
+                            Copy-Item -Path Create_user.ps1 -Destination \\\\${ip}\\C$\\Windows\\Temp\\Create_user.ps1 -Force -Credential \$cred
+
                             Invoke-Command -ComputerName ${ip} -Credential \$cred -ScriptBlock {
-                                Copy-Item -Path .\\ConfigureRemotingForAnsible.ps1 -Destination C``$\\Windows\\Temp\\ConfigureRemotingForAnsible.ps1 -Force
-                                Copy-Item -Path .\\Create_user.ps1 -Destination C``$\\Windows\\Temp\\Create_user.ps1 -Force
-                                
                                 Write-Output "Executing ConfigureRemotingForAnsible.ps1..."
-                                & C``:\\Windows\\Temp\\ConfigureRemotingForAnsible.ps1
+                                & C:\\Windows\\Temp\\ConfigureRemotingForAnsible.ps1
 
                                 Write-Output "Executing Create_user.ps1..."
-                                & C``:\\Windows\\Temp\\Create_user.ps1
+                                & C:\\Windows\\Temp\\Create_user.ps1
                             }
+                        """
+
+                        def scriptPath = "${WORKSPACE}\\${TEMP_POWERSHELL_SCRIPT}"
+                        writeFile file: scriptPath, text: psScript
+                        
+                        echo "Executing script on ${ip} using WinRM..."
+                        def result = bat(returnStatus: true, script: """
+                            powershell -File ${scriptPath}
                         """)
 
                         if (result != 0) {
