@@ -19,10 +19,10 @@ pipeline {
                     bat "\"${GIT_BASH}\" -c 'AWS_ACCESS_KEY_ID=${env.AWS_ACCESS_KEY_ID} AWS_SECRET_ACCESS_KEY=${env.AWS_SECRET_ACCESS_KEY} aws s3 cp s3://${TF_STATE_BUCKET}/${TF_STATE_KEY} terraform.tfstate'"
 
                     def windowsIPs = powershell(returnStdout: true, script: """
-                        \$tfState = Get-Content terraform.tfstate -Raw | ConvertFrom-Json
-                        \$windowsIPs = \$tfState.resources | Where-Object { \$_.'type' -eq 'aws_instance' -and \$_.'name' -match 'windows' } | 
-                            ForEach-Object { \$_.'instances' } | ForEach-Object { \$_[0].'attributes'.'public_ip' }
-                        \$windowsIPs -join ','
+                        $tfState = Get-Content terraform.tfstate -Raw | ConvertFrom-Json
+                        $windowsIPs = $tfState.resources | Where-Object { $_.'type' -eq 'aws_instance' -and $_.'name' -match 'windows' } | 
+                            ForEach-Object { $_.'instances' } | ForEach-Object { $_[0].'attributes'.'public_ip' }
+                        $windowsIPs -join ','
                     """).trim()
 
                     if (!windowsIPs) {
@@ -88,101 +88,79 @@ pipeline {
                 }
             }
         }
-    }
 
-    stage('Execute Scripts on Windows VMs') {
-    steps {
-        script {
-            def ipList = env.WINDOWS_IPS.split(',').findAll { it?.trim() }
-            def tempPasswordFile = "decrypted_passwords.txt"
+        stage('Execute Scripts on Windows VMs') {
+            steps {
+                script {
+                    def ipList = env.WINDOWS_IPS.split(',').findAll { it?.trim() }
+                    def tempPasswordFile = "decrypted_passwords.txt"
+                    def passwordMap = [:]
 
-            // Read passwords from the temporary file
-            def passwordMap = [:]
-            if (fileExists(tempPasswordFile)) {
-                def passwordContent = readFile(tempPasswordFile).trim()
-                passwordMap = passwordContent.split('\n').collectEntries { line ->
-                    def parts = line.split(':')
-                    if (parts.size() == 2) {
-                        [(parts[0]): parts[1]]
-                    } else {
-                        [:]
+                    if (fileExists(tempPasswordFile)) {
+                        def passwordContent = readFile(tempPasswordFile).trim()
+                        passwordMap = passwordContent.split('\n').collectEntries { line ->
+                            def parts = line.split(':')
+                            if (parts.size() == 2) {
+                                [(parts[0]): parts[1]]
+                            } else {
+                                [:]
+                            }
+                        }
+                    }
+
+                    for (ip in ipList) {
+                        if (!passwordMap.containsKey(ip)) {
+                            echo "WARNING: Password for ${ip} not found! Skipping..."
+                            continue
+                        }
+
+                        def password = passwordMap[ip]
+
+                        def psScript = """
+                        \$username = 'Administrator'
+                        \$password = ConvertTo-SecureString '${password}' -AsPlainText -Force
+                        \$cred = New-Object System.Management.Automation.PSCredential (\$username, \$password)
+
+                        if (!(Test-WSMan -ComputerName ${ip} -Credential \$cred -ErrorAction SilentlyContinue)) {
+                            Write-Output "ERROR: WinRM not reachable on ${ip}. Ensure WinRM is enabled."
+                            exit 1
+                        }
+
+                        \$sessionOptions = New-PSSessionOption -SkipCACheck -SkipCNCheck -SkipRevocationCheck
+                        \$session = New-PSSession -ComputerName ${ip} -Credential \$cred -SessionOption \$sessionOptions
+
+                        if (\$session -eq \$null) {
+                            Write-Output "ERROR: Failed to create a session on ${ip}. Skipping..."
+                            exit 1
+                        }
+
+                        Write-Output "Session created successfully on ${ip}."
+                        Copy-Item -Path ConfigureRemotingForAnsible.ps1 -Destination C:\\Windows\\Temp\\ConfigureRemotingForAnsible.ps1 -ToSession \$session -Force
+                        Copy-Item -Path Create_user.ps1 -Destination C:\\Windows\\Temp\\Create_user.ps1 -ToSession \$session -Force
+
+                        Invoke-Command -Session \$session -ScriptBlock {
+                            Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
+                            & C:\\Windows\\Temp\\ConfigureRemotingForAnsible.ps1
+                            & C:\\Windows\\Temp\\Create_user.ps1
+                        }
+
+                        Remove-PSSession \$session
+                        """
+
+                        def scriptPath = "${WORKSPACE}\\execute_remote.ps1"
+                        writeFile file: scriptPath, text: psScript
+                        echo "Executing script on ${ip} using PowerShell..."
+                        def result = bat(returnStatus: true, script: "powershell -File ${scriptPath}")
+
+                        if (result != 0) {
+                            error "Execution failed on ${ip}"
+                        }
+                        echo "Scripts executed successfully on ${ip}!"
                     }
                 }
             }
-
-            for (ip in ipList) {
-                if (!passwordMap.containsKey(ip)) {
-                    echo "WARNING: Password for ${ip} not found! Skipping..."
-                    continue
-                }
-
-                def password = passwordMap[ip]
-
-                echo "Creating remote PowerShell execution script for ${ip}..."
-
-                def psScript = """
-                \$username = 'Administrator'
-                \$password = ConvertTo-SecureString '${password}' -AsPlainText -Force
-                \$cred = New-Object System.Management.Automation.PSCredential (\$username, \$password)
-
-                # Check if WinRM is enabled before creating the session
-                if (!(Test-WSMan -ComputerName ${ip} -Credential \$cred -ErrorAction SilentlyContinue)) {
-                    Write-Output "ERROR: WinRM not reachable on ${ip}. Ensure WinRM is enabled."
-                    exit 1
-                }
-
-                # Create WinRM session with authentication options
-                \$sessionOptions = New-PSSessionOption -SkipCACheck -SkipCNCheck -SkipRevocationCheck
-                \$session = New-PSSession -ComputerName ${ip} -Credential \$cred -SessionOption \$sessionOptions
-
-                if (\$session -eq \$null) {
-                    Write-Output "ERROR: Failed to create a session on ${ip}. Skipping..."
-                    exit 1
-                }
-
-                Write-Output "Session created successfully on ${ip}."
-
-                # Copy scripts to remote VM
-                Write-Output "Copying scripts to ${ip}..."
-                Copy-Item -Path ConfigureRemotingForAnsible.ps1 -Destination C:\\Windows\\Temp\\ConfigureRemotingForAnsible.ps1 -ToSession \$session -Force
-                Copy-Item -Path Create_user.ps1 -Destination C:\\Windows\\Temp\\Create_user.ps1 -ToSession \$session -Force
-
-                # Ensure execution policy allows script execution
-                Invoke-Command -Session \$session -ScriptBlock {
-                    Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
-                }
-
-                # Execute scripts remotely
-                Invoke-Command -Session \$session -ScriptBlock {
-                    Write-Output "Executing ConfigureRemotingForAnsible.ps1..."
-                    & C:\\Windows\\Temp\\ConfigureRemotingForAnsible.ps1
-
-                    Write-Output "Executing Create_user.ps1..."
-                    & C:\\Windows\\Temp\\Create_user.ps1
-                }
-
-                # Remove session
-                Remove-PSSession \$session
-                """
-
-                def scriptPath = "${WORKSPACE}\\execute_remote.ps1"
-                writeFile file: scriptPath, text: psScript
-
-                echo "Executing script on ${ip} using PowerShell..."
-                def result = bat(returnStatus: true, script: """
-                    powershell -File ${scriptPath}
-                """)
-
-                if (result != 0) {
-                    error "Execution failed on ${ip}"
-                }
-
-                echo "Scripts executed successfully on ${ip}!"
-            }
         }
     }
-}
-
     post {
         failure {
             echo "Pipeline failed! Check logs for details."
