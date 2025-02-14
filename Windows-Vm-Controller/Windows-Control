@@ -89,74 +89,7 @@ pipeline {
             }
         }
 
-        stage('Execute Scripts on Windows VMs') {
-            steps {
-                script {
-                    def ipList = env.WINDOWS_IPS.split(',').findAll { it?.trim() }
-                    def tempPasswordFile = "decrypted_passwords.txt"
-
-                    // Read passwords from the temporary file
-                    def passwordMap = [:]
-                    if (fileExists(tempPasswordFile)) {
-                        def passwordContent = readFile(tempPasswordFile).trim()
-                        passwordMap = passwordContent.split('\n').collectEntries { line ->
-                            def parts = line.split(':')
-                            if (parts.size() == 2) {
-                                [(parts[0]): parts[1]]
-                            } else {
-                                [:]
-                            }
-                        }
-                    }
-
-                    for (ip in ipList) {
-                        if (!passwordMap.containsKey(ip)) {
-                            echo "WARNING: Password for ${ip} not found! Skipping..."
-                            continue
-                        }
-
-                        def password = passwordMap[ip]
-
-                        echo "Creating remote PowerShell script for ${ip}..."
-
-                       def psScript = """
-                        \$username = 'Administrator'
-                        \$password = ConvertTo-SecureString '${password}' -AsPlainText -Force
-                        \$cred = New-Object System.Management.Automation.PSCredential (\$username, \$password)
-
-                        Copy-Item -Path ConfigureRemotingForAnsible.ps1 -Destination '\\\\${ip}\\C\$\\Windows\\Temp\\ConfigureRemotingForAnsible.ps1' -Force -Credential \$cred
-                        Copy-Item -Path Create_user.ps1 -Destination '\\\\${ip}\\C\$\\Windows\\Temp\\Create_user.ps1' -Force -Credential \$cred
-
-                        Invoke-Command -ComputerName ${ip} -Credential \$cred -ScriptBlock {
-                            Write-Output "Executing ConfigureRemotingForAnsible.ps1..."
-                            & C:\\Windows\\Temp\\ConfigureRemotingForAnsible.ps1
-
-                            Write-Output "Executing Create_user.ps1..."
-                            & C:\\Windows\\Temp\\Create_user.ps1
-                        }
-                    """
-
-
-                        def scriptPath = "${WORKSPACE}\\${TEMP_POWERSHELL_SCRIPT}"
-                        writeFile file: scriptPath, text: psScript
-                        
-                        echo "Executing script on ${ip} using WinRM..."
-                        def result = bat(returnStatus: true, script: """
-                            powershell -File ${scriptPath}
-                        """)
-
-                        if (result != 0) {
-                            error "Execution failed on ${ip}"
-                        }
-
-                        echo "Scripts executed successfully on ${ip}!"
-                    }
-                }
-            }
-        }
-    }
-
-            stage('Execute Scripts on Windows VMs') {
+    stage('Execute Scripts on Windows VMs') {
                 steps {
                     script {
                         def ipList = env.WINDOWS_IPS.split(',').findAll { it?.trim() }
@@ -228,6 +161,7 @@ pipeline {
                     }
                 }
             }
+    }
 
     post {
         failure {
