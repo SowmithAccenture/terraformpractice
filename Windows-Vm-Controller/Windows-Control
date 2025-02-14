@@ -50,55 +50,31 @@ pipeline {
                 }
             }
         }
-
-        stage('Decrypt Windows Passwords') {
+stage('Execute Scripts on Windows VMs') {
             steps {
-                withCredentials([file(credentialsId: 'windows-private-key', variable: 'PRIVATE_KEY_PATH')]) {
-                    script {
-                        def ipList = env.WINDOWS_IPS?.split(',')?.findAll { it?.trim() } ?: []
-                        def passwordEntries = []
+                script {
+                    def passwordEntries = readFile("${WORKSPACE}\\decrypted_passwords.txt").trim().split('\n')
 
-                        for (ip in ipList) {
-                            echo "Decrypting password for ${ip}..."
+                    for (entry in passwordEntries) {
+                        def (ip, password) = entry.split(':', 2)
+                        echo "Executing scripts on ${ip}..."
 
-                            // Fetch instance ID based on IP
-                            def instanceId = powershell(returnStdout: true, script: """
-                                aws ec2 describe-instances --filters "Name=ip-address,Values=${ip}" --query "Reservations[*].Instances[*].InstanceId" --output text --region us-east-1
-                            """).trim()
+                        def sshCommand = "\"${SSH_COMMAND}\" ${ADMIN_USERNAME}@${ip} -o StrictHostKeyChecking=no"
 
-                            if (!instanceId) {
-                                echo "WARNING: Instance ID for ${ip} not found. Skipping..."
-                                continue
-                            }
+                        // Transfer the scripts to the Windows VM
+                        bat "scp -o StrictHostKeyChecking=no ConfigureRemotingForAnsible.ps1 Create_user.ps1 ${ADMIN_USERNAME}@${ip}:C:\\Windows\\Temp\\"
 
-                            // Run AWS command to get decrypted password
-                            def decryptedPassword = powershell(returnStdout: true, script: """
-                                aws ec2 get-password-data --instance-id ${instanceId} --priv-launch-key ${PRIVATE_KEY_PATH} --query 'PasswordData' --output text --region us-east-1
-                            """).trim()
+                        // Run the scripts remotely using SSH & PowerShell
+                        bat "${sshCommand} powershell -ExecutionPolicy Bypass -File C:\\Windows\\Temp\\ConfigureRemotingForAnsible.ps1"
+                        bat "${sshCommand} powershell -ExecutionPolicy Bypass -File C:\\Windows\\Temp\\Create_user.ps1"
 
-                            if (!decryptedPassword || decryptedPassword == "None") {
-                                echo "WARNING: Failed to retrieve decrypted password for ${ip}. Skipping..."
-                                continue
-                            }
-
-                            passwordEntries.add("${ip}:${decryptedPassword}")
-                        }
-
-                        if (passwordEntries.isEmpty()) {
-                            error "No passwords were successfully decrypted. Exiting..."
-                        }
-
-                        // Store decrypted passwords in a temporary file
-                        def passwordFile = "${WORKSPACE}\\decrypted_passwords.txt"
-                        writeFile file: passwordFile, text: passwordEntries.join('\n')
-
-                        echo "Decryption complete! Passwords stored in ${passwordFile}"
+                        echo "Scripts executed successfully on ${ip}!"
                     }
                 }
             }
         }
+    }
 
-     }
 
             post {
                 failure {
