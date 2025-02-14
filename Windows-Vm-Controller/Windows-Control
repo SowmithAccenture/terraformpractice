@@ -89,7 +89,6 @@ pipeline {
             }
         }
     
-    }
 
     stage('Execute Scripts on Windows VMs') {
             steps {
@@ -183,6 +182,8 @@ pipeline {
                 }
             }
         }
+
+    }
 
     post {
         failure {
