@@ -18,6 +18,7 @@ pipeline {
                 
                 // Initialize Terraform with the backend configuration from backend.tf
                 bat "\"${gitBash}\" -c '${terraformPath} init -force-copy'"
+                
             }
         }
     }
