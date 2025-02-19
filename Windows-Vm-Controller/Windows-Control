@@ -113,8 +113,6 @@ pipeline {
                 // SSH Command to execute scripts remotely
                 def sshCommand = "\"C:\\Windows\\System32\\OpenSSH\\ssh.exe\" -n ${ADMIN_USERNAME}@${ip} -o StrictHostKeyChecking=no"
 
-                // Verify scripts exist before execution
-                bat "${sshCommand} powershell -Command \"Get-ChildItem C:\\Users\\Administrator\\Desktop\\*.ps1\""
 
                 // Execute scripts remotely with -Force and -Confirm:$false to bypass any prompts
                 bat "${sshCommand} powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File C:\\Users\\Administrator\\Desktop\\ConfigureRemotingForAnsible.ps1 -Force -Confirm:\$false"
