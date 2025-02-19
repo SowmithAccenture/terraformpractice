@@ -92,7 +92,7 @@ pipeline {
             }
         }
 
-        stage('Execute Scripts on Windows VMs') {
+       stage('Execute Scripts on Windows VMs') {
     steps {
         script {
             def passwordEntries = readFile("${WORKSPACE}\\decrypted_passwords.txt").trim().split('\n')
@@ -101,20 +101,31 @@ pipeline {
                 def (ip, password) = entry.split(':', 2)
                 echo "Executing scripts on ${ip}..."
 
-                // SSH command to execute PowerShell scripts remotely
-                def sshCommand = "\"C:\\Windows\\System32\\OpenSSH\\ssh.exe\" ${ADMIN_USERNAME}@${ip} -o StrictHostKeyChecking=no"
+                // WinSCP: Copy scripts to Windows VM
+                bat """
+                "C:\\Program Files (x86)\\WinSCP\\WinSCP.com" /command ^
+                "open sftp://${ADMIN_USERNAME}:${password}@${ip}/ -hostkey=* -rawsettings AuthKI=0 AuthGSSAPI=0" ^
+                "put ConfigureRemotingForAnsible.ps1 C:/Users/Administrator/Desktop/" ^
+                "put Create_user.ps1 C:/Users/Administrator/Desktop/" ^
+                "exit"
+                """
 
-                // Run ConfigureRemotingForAnsible.ps1 with NoProfile and NonInteractive to prevent hanging
-                bat "${sshCommand} powershell -NoProfile -NonInteractive -File C:\\Users\\Administrator\\Desktop\\ConfigureRemotingForAnsible.ps1"
-                
-                // Run Create_user.ps1 script
-                bat "${sshCommand} powershell -NoProfile -NonInteractive -File C:\\Users\\Administrator\\Desktop\\Create_user.ps1"
+                // SSH Command to execute scripts remotely
+                def sshCommand = "\"C:\\Windows\\System32\\OpenSSH\\ssh.exe\" -n ${ADMIN_USERNAME}@${ip} -o StrictHostKeyChecking=no"
+
+                // Verify scripts exist before execution
+                bat "${sshCommand} powershell -Command \"Get-ChildItem C:\\Users\\Administrator\\Desktop\\*.ps1\""
+
+                // Execute scripts remotely with -Force and -Confirm:$false to bypass any prompts
+                bat "${sshCommand} powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File C:\\Users\\Administrator\\Desktop\\ConfigureRemotingForAnsible.ps1 -Force -Confirm:\$false"
+                bat "${sshCommand} powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File C:\\Users\\Administrator\\Desktop\\Create_user.ps1 -Force -Confirm:\$false"
 
                 echo "Scripts executed successfully on ${ip}!"
             }
         }
     }
 }
+
 
     }
 
