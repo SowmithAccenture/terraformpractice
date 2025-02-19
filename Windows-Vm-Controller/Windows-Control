@@ -93,33 +93,45 @@ pipeline {
         }
 
         stage('Execute Scripts on Windows VMs') {
-            steps {
-                script {
-                    def passwordEntries = readFile("${WORKSPACE}\\decrypted_passwords.txt").trim().split('\n')
+    steps {
+        script {
+            def passwordEntries = readFile("${WORKSPACE}\\decrypted_passwords.txt").trim().split('\n')
 
-                    for (entry in passwordEntries) {
-                        def (ip, password) = entry.split(':', 2)
-                        echo "Executing scripts on ${ip}..."
+            for (entry in passwordEntries) {
+                def (ip, password) = entry.split(':', 2)
+                echo "Executing scripts on ${ip}..."
 
-                        def winscpPath = "\"C:\\Program Files (x86)\\WinSCP\\WinSCP.com\""
-                        def sshCommand = "\"${SSH_COMMAND}\" ${ADMIN_USERNAME}@${ip}"
+                // WinSCP command to transfer scripts to Windows VM
+                def winscpCommand = "\"C:\\Program Files (x86)\\WinSCP\\WinSCP.com\" /command " +
+                    "\"open sftp://${ADMIN_USERNAME}:${password}@${ip}/ -hostkey=* -rawsettings AuthKI=0 AuthGSSAPI=0\" " +
+                    "\"cd C:/Users/Administrator/Desktop/\" " + 
+                    "\"put ConfigureRemotingForAnsible.ps1\" " +
+                    "\"put Create_user.ps1\" " +
+                    "\"exit\""
 
-                        // Use WinSCP to transfer files
-                        bat """
-                        ${winscpPath} /command "open sftp://${ADMIN_USERNAME}:${password}@${ip}/ -hostkey=* -rawsettings AuthKI=0 AuthGSSAPI=0" "put ConfigureRemotingForAnsible.ps1 C:\\Windows\\Temp\\" "put Create_user.ps1 C:\\Windows\\Temp\\" "exit"
-                        """
+                // Run WinSCP to transfer scripts
+                bat winscpCommand
 
-                        // Run the scripts remotely using SSH & PowerShell
-                        bat "${sshCommand} powershell -ExecutionPolicy Bypass -File C:\\Windows\\Temp\\ConfigureRemotingForAnsible.ps1"
-                        bat "${sshCommand} powershell -ExecutionPolicy Bypass -File C:\\Windows\\Temp\\Create_user.ps1"
+                // Verify script transfer by listing directory contents
+                def winscpListCommand = "\"C:\\Program Files (x86)\\WinSCP\\WinSCP.com\" /command " +
+                    "\"open sftp://${ADMIN_USERNAME}:${password}@${ip}/ -hostkey=*\" " +
+                    "\"ls C:/Users/Administrator/Desktop/\" " +
+                    "\"exit\""
 
-                        echo "Scripts executed successfully on ${ip}!"
-                    }
-                }
+                bat winscpListCommand
+
+                // SSH command to execute PowerShell scripts on the Windows VM
+                def sshCommand = "\"${SSH_COMMAND}\" ${ADMIN_USERNAME}@${ip} -o StrictHostKeyChecking=no"
+
+                bat "${sshCommand} powershell -ExecutionPolicy Bypass -File C:\\Users\\Administrator\\Desktop\\ConfigureRemotingForAnsible.ps1"
+                bat "${sshCommand} powershell -ExecutionPolicy Bypass -File C:\\Users\\Administrator\\Desktop\\Create_user.ps1"
+
+                echo "Scripts executed successfully on ${ip}!"
             }
         }
-
-     }
+    }
+}
+    }
 
     post {
         failure {
