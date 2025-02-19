@@ -111,14 +111,14 @@ pipeline {
                 """
 
                 // SSH Command to execute scripts remotely
-                def sshCommand = "C:\\Windows\\System32\\OpenSSH\\ssh.exe -n ${ADMIN_USERNAME}@${ip} -o StrictHostKeyChecking=no"
+                def sshCommand = "C:\\Windows\\System32\\OpenSSH\\ssh.exe ${ADMIN_USERNAME}@${ip} -o StrictHostKeyChecking=no"
 
-                // Execute scripts remotely using SSH & PowerShell
+                // Use PowerShell via SSH
                 powershell """
-                & ${sshCommand} "powershell.exe -ExecutionPolicy Bypass -File C:\\Users\\Administrator\\Desktop\\ConfigureRemotingForAnsible.ps1 -Force -Confirm:\$false"
-                & ${sshCommand} "powershell.exe -ExecutionPolicy Bypass -File C:\\Users\\Administrator\\Desktop\\Create_user.ps1 -Force -Confirm:\$false"
+                Start-Process -NoNewWindow -Wait -FilePath 'C:\\Windows\\System32\\OpenSSH\\ssh.exe' -ArgumentList '${ADMIN_USERNAME}@${ip} -o StrictHostKeyChecking=no "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -ExecutionPolicy Bypass -File C:\\\\Users\\\\Administrator\\\\Desktop\\\\ConfigureRemotingForAnsible.ps1 -Force -Confirm:\\\$false"'
+                Start-Process -NoNewWindow -Wait -FilePath 'C:\\Windows\\System32\\OpenSSH\\ssh.exe' -ArgumentList '${ADMIN_USERNAME}@${ip} -o StrictHostKeyChecking=no "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -ExecutionPolicy Bypass -File C:\\\\Users\\\\Administrator\\\\Desktop\\\\Create_user.ps1 -Force -Confirm:\\\$false"'
                 """
-
+                
                 echo "Scripts executed successfully on ${ip}!"
             }
         }
