@@ -101,36 +101,21 @@ pipeline {
                 def (ip, password) = entry.split(':', 2)
                 echo "Executing scripts on ${ip}..."
 
-                // WinSCP command to transfer scripts to Windows VM
-                def winscpCommand = "\"C:\\Program Files (x86)\\WinSCP\\WinSCP.com\" /command " +
-                    "\"open sftp://${ADMIN_USERNAME}:${password}@${ip}/ -hostkey=* -rawsettings AuthKI=0 AuthGSSAPI=0\" " +
-                    "\"cd C:/Users/Administrator/Desktop/\" " + 
-                    "\"put ConfigureRemotingForAnsible.ps1\" " +
-                    "\"put Create_user.ps1\" " +
-                    "\"exit\""
+                // SSH command to execute PowerShell scripts remotely
+                def sshCommand = "\"C:\\Windows\\System32\\OpenSSH\\ssh.exe\" ${ADMIN_USERNAME}@${ip} -o StrictHostKeyChecking=no"
 
-                // Run WinSCP to transfer scripts
-                bat winscpCommand
-
-                // Verify script transfer by listing directory contents
-                def winscpListCommand = "\"C:\\Program Files (x86)\\WinSCP\\WinSCP.com\" /command " +
-                    "\"open sftp://${ADMIN_USERNAME}:${password}@${ip}/ -hostkey=*\" " +
-                    "\"ls C:/Users/Administrator/Desktop/\" " +
-                    "\"exit\""
-
-                bat winscpListCommand
-
-                // SSH command to execute PowerShell scripts on the Windows VM
-                def sshCommand = "\"${SSH_COMMAND}\" ${ADMIN_USERNAME}@${ip} -o StrictHostKeyChecking=no"
-
-                bat "${sshCommand} powershell -ExecutionPolicy Bypass -File C:\\Users\\Administrator\\Desktop\\ConfigureRemotingForAnsible.ps1"
-                bat "${sshCommand} powershell -ExecutionPolicy Bypass -File C:\\Users\\Administrator\\Desktop\\Create_user.ps1"
+                // Run ConfigureRemotingForAnsible.ps1 with NoProfile and NonInteractive to prevent hanging
+                bat "${sshCommand} powershell -NoProfile -NonInteractive -File C:\\Users\\Administrator\\Desktop\\ConfigureRemotingForAnsible.ps1"
+                
+                // Run Create_user.ps1 script
+                bat "${sshCommand} powershell -NoProfile -NonInteractive -File C:\\Users\\Administrator\\Desktop\\Create_user.ps1"
 
                 echo "Scripts executed successfully on ${ip}!"
             }
         }
     }
 }
+
     }
 
     post {
