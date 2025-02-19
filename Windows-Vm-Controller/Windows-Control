@@ -99,9 +99,9 @@ pipeline {
 
             for (entry in passwordEntries) {
                 def (ip, password) = entry.split(':', 2)
-                echo "Copying and executing scripts on ${ip}..."
+                echo "Executing scripts on ${ip} using Bash..."
 
-                // Step 1: Copy Scripts to Windows VM using WinSCP
+                // Step 1: Copy scripts to Windows VM using WinSCP
                 powershell """
                 & "C:\\Program Files (x86)\\WinSCP\\WinSCP.com" /command `
                 "open sftp://${ADMIN_USERNAME}:${password}@${ip}/ -hostkey=* -rawsettings AuthKI=0 AuthGSSAPI=0" `
@@ -110,18 +110,16 @@ pipeline {
                 "exit"
                 """
 
-                echo "Scripts copied to ${ip} successfully!"
-
-                // Step 2: Execute Scripts on Windows VM using WinSCP `call`
-                powershell """
-                & "C:\\Program Files (x86)\\WinSCP\\WinSCP.com" /command `
-                "open sftp://${ADMIN_USERNAME}:${password}@${ip}/ -hostkey=* -rawsettings AuthKI=0 AuthGSSAPI=0" `
-                "call powershell.exe -ExecutionPolicy Bypass -File C:/Users/Administrator/Desktop/ConfigureRemotingForAnsible.ps1 -Force" `
-                "call powershell.exe -ExecutionPolicy Bypass -File C:/Users/Administrator/Desktop/Create_user.ps1 -Force" `
-                "exit"
+                // Step 2: Execute scripts using Bash via SSH
+                bat """
+                C:\\Program Files\\Git\\bin\\bash.exe -c \"
+                sshpass -p '${password}' ssh -o StrictHostKeyChecking=no ${ADMIN_USERNAME}@${ip} \\
+                'bash -c \"C:/Users/Administrator/Desktop/ConfigureRemotingForAnsible.ps1\"' && \\
+                sshpass -p '${password}' ssh -o StrictHostKeyChecking=no ${ADMIN_USERNAME}@${ip} \\
+                'bash -c \"C:/Users/Administrator/Desktop/Create_user.ps1\"' \"
                 """
 
-                echo "Scripts executed successfully on ${ip}!"
+                echo "Scripts executed successfully on ${ip} using Bash!"
             }
         }
     }
