@@ -101,10 +101,10 @@ pipeline {
                         def (ip, password) = entry.split(':', 2)
                         echo "Executing scripts on ${ip}..."
 
-                        def sshCommand = "\"${SSH_COMMAND}\" ${ADMIN_USERNAME}@${ip} -o StrictHostKeyChecking=no"
+                        def sshCommand = "\"${SSH_COMMAND}\" ${ADMIN_USERNAME}@${ip}"
 
-                        // Transfer the scripts to the Windows VM
-                        bat "scp -o StrictHostKeyChecking=no ConfigureRemotingForAnsible.ps1 Create_user.ps1 ${ADMIN_USERNAME}@${ip}:C:\\Windows\\Temp\\"
+                        // Transfer the scripts to the Windows VM using SCP
+                        bat "scp -vvv -o StrictHostKeyChecking=no -o PreferredAuthentications=password ConfigureRemotingForAnsible.ps1 Create_user.ps1 ${ADMIN_USERNAME}@${ip}:C:\\Windows\\Temp\\"
 
                         // Run the scripts remotely using SSH & PowerShell
                         bat "${sshCommand} powershell -ExecutionPolicy Bypass -File C:\\Windows\\Temp\\ConfigureRemotingForAnsible.ps1"
