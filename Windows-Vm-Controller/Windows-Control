@@ -99,9 +99,9 @@ pipeline {
 
             for (entry in passwordEntries) {
                 def (ip, password) = entry.split(':', 2)
-                echo "Executing scripts on ${ip}..."
+                echo "Copying and executing scripts on ${ip}..."
 
-                // WinSCP: Copy scripts to Windows VM
+                // Step 1: Copy Scripts to Windows VM using WinSCP
                 powershell """
                 & "C:\\Program Files (x86)\\WinSCP\\WinSCP.com" /command `
                 "open sftp://${ADMIN_USERNAME}:${password}@${ip}/ -hostkey=* -rawsettings AuthKI=0 AuthGSSAPI=0" `
@@ -110,20 +110,23 @@ pipeline {
                 "exit"
                 """
 
-                // SSH Command to execute scripts remotely
-                 def sshCommand = "\"C:\\\\Windows\\\\System32\\\\OpenSSH\\\\ssh.exe\" ${ADMIN_USERNAME}@${ip} -o StrictHostKeyChecking=no"
+                echo "Scripts copied to ${ip} successfully!"
 
-                // Use PowerShell without `-Confirm`
+                // Step 2: Execute Scripts on Windows VM using WinSCP `call`
                 powershell """
-                & ${sshCommand} "powershell.exe -ExecutionPolicy Bypass -File C:\\\\Users\\\\Administrator\\\\Desktop\\\\ConfigureRemotingForAnsible.ps1 -Force"
-                & ${sshCommand} "powershell.exe -ExecutionPolicy Bypass -File C:\\\\Users\\\\Administrator\\\\Desktop\\\\Create_user.ps1 -Force"
+                & "C:\\Program Files (x86)\\WinSCP\\WinSCP.com" /command `
+                "open sftp://${ADMIN_USERNAME}:${password}@${ip}/ -hostkey=* -rawsettings AuthKI=0 AuthGSSAPI=0" `
+                "call powershell.exe -ExecutionPolicy Bypass -File C:/Users/Administrator/Desktop/ConfigureRemotingForAnsible.ps1 -Force" `
+                "call powershell.exe -ExecutionPolicy Bypass -File C:/Users/Administrator/Desktop/Create_user.ps1 -Force" `
+                "exit"
                 """
-                
+
                 echo "Scripts executed successfully on ${ip}!"
             }
         }
     }
 }
+
     }
 
     post {
