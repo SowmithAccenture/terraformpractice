@@ -113,20 +113,17 @@ pipeline {
                 // SSH Command to execute scripts remotely
                 def sshCommand = "C:\\Windows\\System32\\OpenSSH\\ssh.exe -n ${ADMIN_USERNAME}@${ip} -o StrictHostKeyChecking=no"
 
-                // Verify scripts exist before execution
-                powershell "& ${sshCommand} powershell.exe -Command \"Get-ChildItem C:\\Users\\Administrator\\Desktop\\*.ps1\""
-
-                // Execute scripts using PowerShell directly
-                powershell "& ${sshCommand} powershell.exe -ExecutionPolicy Bypass -File C:\\Users\\Administrator\\Desktop\\ConfigureRemotingForAnsible.ps1 -Force -Confirm:`\$false"
-                powershell "& ${sshCommand} powershell.exe -ExecutionPolicy Bypass -File C:\\Users\\Administrator\\Desktop\\Create_user.ps1 -Force -Confirm:`\$false"
+                // Execute scripts remotely using SSH & PowerShell
+                powershell """
+                & ${sshCommand} "powershell.exe -ExecutionPolicy Bypass -File C:\\Users\\Administrator\\Desktop\\ConfigureRemotingForAnsible.ps1 -Force -Confirm:\$false"
+                & ${sshCommand} "powershell.exe -ExecutionPolicy Bypass -File C:\\Users\\Administrator\\Desktop\\Create_user.ps1 -Force -Confirm:\$false"
+                """
 
                 echo "Scripts executed successfully on ${ip}!"
             }
         }
     }
 }
-
-
     }
 
     post {
