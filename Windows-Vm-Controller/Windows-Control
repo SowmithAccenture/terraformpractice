@@ -110,13 +110,10 @@ pipeline {
                 "exit"
                 """
 
-                // Step 2: Execute scripts using Bash via SSH
-                bat """
-                C:\\Program Files\\Git\\bin\\bash.exe -c \"
-                sshpass -p '${password}' ssh -o StrictHostKeyChecking=no ${ADMIN_USERNAME}@${ip} \\
-                'bash -c \"C:/Users/Administrator/Desktop/ConfigureRemotingForAnsible.ps1\"' && \\
-                sshpass -p '${password}' ssh -o StrictHostKeyChecking=no ${ADMIN_USERNAME}@${ip} \\
-                'bash -c \"C:/Users/Administrator/Desktop/Create_user.ps1\"' \"
+                // Step 2: Execute PowerShell scripts via SSH
+                sh """
+                sshpass -p '${password}' ssh -o StrictHostKeyChecking=no ${ADMIN_USERNAME}@${ip} "powershell -ExecutionPolicy Bypass -File C:/Users/Administrator/Desktop/ConfigureRemotingForAnsible.ps1"
+                sshpass -p '${password}' ssh -o StrictHostKeyChecking=no ${ADMIN_USERNAME}@${ip} "powershell -ExecutionPolicy Bypass -File C:/Users/Administrator/Desktop/Create_user.ps1"
                 """
 
                 echo "Scripts executed successfully on ${ip} using Bash!"
