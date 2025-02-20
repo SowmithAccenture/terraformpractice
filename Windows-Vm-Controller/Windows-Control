@@ -107,7 +107,7 @@ pipeline {
                 // Step 1: Copy scripts to Windows VM using WinSCP
                 powershell """
                 & "C:\\Program Files (x86)\\WinSCP\\WinSCP.com" /command `
-                "open sftp://${ADMIN_USERNAME}:${password}@${ip}/ -hostkey=* -rawsettings AuthKI=0 AuthGSSAPI=0" `
+                "open sftp://Administrator:${password}@${ip}/ -hostkey=* -rawsettings AuthKI=0 AuthGSSAPI=0" `
                 "put ConfigureRemotingForAnsible.ps1 C:/Users/Administrator/Desktop/" `
                 "put Create_user.ps1 C:/Users/Administrator/Desktop/" `
                 "exit"
@@ -116,11 +116,9 @@ pipeline {
                 // Step 2: Execute scripts using SSH with SSHPASS in Git Bash
                 bat """
                 ${GIT_BASH} -c '
-                ${SSHPASS_PATH} -p "${password}" ${SSH_PATH} -o StrictHostKeyChecking=no Administrator@${ip} \\
-                "powershell -ExecutionPolicy Bypass -NoProfile -NonInteractive -File C:/Users/Administrator/Desktop/ConfigureRemotingForAnsible.ps1; Exit"
+                ${SSHPASS_PATH} -p $password $SSH_PATH -o StrictHostKeyChecking=no Administrator@$ip "cmd /c powershell -ExecutionPolicy Bypass -NoProfile -NonInteractive -File C:\\Users\\Administrator\\Desktop\\ConfigureRemotingForAnsible.ps1"
 
-                ${SSHPASS_PATH} -p "${password}" ${SSH_PATH} -o StrictHostKeyChecking=no Administrator@${ip} \\
-                "powershell -ExecutionPolicy Bypass -NoProfile -NonInteractive -File C:/Users/Administrator/Desktop/Create_user.ps1; Exit"
+                ${SSHPASS_PATH} -p $password $SSH_PATH -o StrictHostKeyChecking=no Administrator@$ip "cmd /c powershell -ExecutionPolicy Bypass -NoProfile -NonInteractive -File C:\\Users\\Administrator\\Desktop\\Create_user.ps1"
                 '
                 """
 
@@ -129,6 +127,7 @@ pipeline {
         }
     }
 }
+
 
 
     }
