@@ -114,13 +114,13 @@ pipeline {
                 """
 
 
-                   // Step 2: Execute scripts using SSH via Cygwin
-                bat """
-                "C:\\cygwin64\\bin\\sshpass.exe" -p '${password}' "C:\\Windows\\System32\\OpenSSH\\ssh.exe" -o StrictHostKeyChecking=no ${ADMIN_USERNAME}@${ip} ^
-                "powershell -ExecutionPolicy Bypass -File C:/Users/Administrator/Desktop/ConfigureRemotingForAnsible.ps1"
+                                // Define plink path
+                def PLINK_PATH = "C:\\Program Files\\PuTTY\\plink.exe"
 
-                "C:\\cygwin64\\bin\\sshpass.exe" -p '${password}' "C:\\Windows\\System32\\OpenSSH\\ssh.exe" -o StrictHostKeyChecking=no ${ADMIN_USERNAME}@${ip} ^
-                "powershell -ExecutionPolicy Bypass -File C:/Users/Administrator/Desktop/Create_user.ps1"
+                // Step 2: Execute scripts using Plink
+                bat """
+                "${PLINK_PATH}" -ssh -pw ${password} Administrator@${ip} powershell -ExecutionPolicy Bypass -File C:/Users/Administrator/Desktop/ConfigureRemotingForAnsible.ps1
+                "${PLINK_PATH}" -ssh -pw ${password} Administrator@${ip} powershell -ExecutionPolicy Bypass -File C:/Users/Administrator/Desktop/Create_user.ps1
                 """
                 echo "Scripts executed successfully on ${ip}!"
             }
