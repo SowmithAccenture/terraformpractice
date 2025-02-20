@@ -120,15 +120,15 @@ pipeline {
                 // Step 3: Execute ConfigureRemotingForAnsible.ps1 script
                 bat """
                 "C:\\cygwin64\\bin\\sshpass.exe" -p "${password}" ^
-                "C:\\Windows\\System32\\OpenSSH\\ssh.exe" -tt -o StrictHostKeyChecking=no Administrator@${ip} ^
-                "powershell -ExecutionPolicy Bypass -NoProfile -NonInteractive -Command \\"Start-Process -FilePath 'powershell' -ArgumentList '-ExecutionPolicy Bypass -File C:/Users/Administrator/Desktop/ConfigureRemotingForAnsible.ps1' -Verb RunAs\\""
+                "C:\\Windows\\System32\\OpenSSH\\ssh.exe" -vvv -o StrictHostKeyChecking=no Administrator@${ip} ^
+                "nohup powershell -ExecutionPolicy Bypass -NoProfile -NonInteractive -Command \\"Start-Process -FilePath 'powershell' -ArgumentList '-ExecutionPolicy Bypass -File C:/Users/Administrator/Desktop/ConfigureRemotingForAnsible.ps1' -Verb RunAs\\""
                 """
 
                 // Step 4: Execute Create_user.ps1 script
                 bat """
                 "C:\\cygwin64\\bin\\sshpass.exe" -p "${password}" ^
-                "C:\\Windows\\System32\\OpenSSH\\ssh.exe" -tt -o StrictHostKeyChecking=no Administrator@${ip} ^
-                "powershell -ExecutionPolicy Bypass -NoProfile -NonInteractive -Command \\"Start-Process -FilePath 'powershell' -ArgumentList '-ExecutionPolicy Bypass -File C:/Users/Administrator/Desktop/Create_user.ps1' -Verb RunAs\\""
+                "C:\\Windows\\System32\\OpenSSH\\ssh.exe" -vvv -o StrictHostKeyChecking=no Administrator@${ip} ^
+                "nohup powershell -ExecutionPolicy Bypass -NoProfile -NonInteractive -Command \\"Start-Process -FilePath 'powershell' -ArgumentList '-ExecutionPolicy Bypass -File C:/Users/Administrator/Desktop/Create_user.ps1' -Verb RunAs\\""
                 """
 
                 echo "Scripts executed successfully on ${ip}!"
