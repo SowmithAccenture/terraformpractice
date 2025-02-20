@@ -112,15 +112,21 @@ pipeline {
                 "put Create_user.ps1 C:/Users/Administrator/Desktop/" `
                 "exit"
                 """
+                
+                def PLINK_PATH = "\"C:\\Program Files\\PuTTY\\plink.exe\""
 
-
-                                // Define plink path
-                def PLINK_PATH = "C:\\Program Files\\PuTTY\\plink.exe"
+               // Step 1: Fetch and store SSH host key
+                bat """
+                echo y | ${PLINK_PATH} -ssh -pw ${password} Administrator@${ip} exit
+                """
 
                 // Step 2: Execute scripts using Plink
                 bat """
-                echo y | "${PLINK_PATH}" -ssh -pw ${password} -batch Administrator@${ip} powershell -ExecutionPolicy Bypass -File C:/Users/Administrator/Desktop/ConfigureRemotingForAnsible.ps1
-                echo y | "${PLINK_PATH}" -ssh -pw ${password} -batch Administrator@${ip} powershell -ExecutionPolicy Bypass -File C:/Users/Administrator/Desktop/Create_user.ps1
+                ${PLINK_PATH} -ssh -pw ${password} -batch -hostkey * Administrator@${ip} ^
+                powershell -ExecutionPolicy Bypass -File C:/Users/Administrator/Desktop/ConfigureRemotingForAnsible.ps1
+
+                ${PLINK_PATH} -ssh -pw ${password} -batch -hostkey * Administrator@${ip} ^
+                powershell -ExecutionPolicy Bypass -File C:/Users/Administrator/Desktop/Create_user.ps1
                 """
                 echo "Scripts executed successfully on ${ip}!"
             }
