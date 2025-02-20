@@ -110,9 +110,9 @@ pipeline {
                 "exit"
                 """
 
-                 // Step 2: Execute scripts using SSH with SSHPASS in Git Bash
+                  // Step 2: Execute scripts using SSH with SSHPASS in Git Bash
                 sh """
-                "\"C:\\\\Program Files\\\\Git\\\\bin\\\\bash.exe\"" -c '
+                \"${GIT_BASH}\" -c '
                 /c/cygwin64/bin/sshpass -p "${password}" \\
                 /c/Windows/System32/OpenSSH/ssh -o StrictHostKeyChecking=no Administrator@${ip} \\
                 "powershell -ExecutionPolicy Bypass -NoProfile -NonInteractive -File C:/Users/Administrator/Desktop/ConfigureRemotingForAnsible.ps1; Exit"
