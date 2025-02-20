@@ -99,18 +99,18 @@ pipeline {
 
             for (entry in passwordEntries) {
                 def (ip, password) = entry.split(':', 2)
-                echo "Executing scripts on ${ip} using Cygwin SSH..."
+                echo "Executing scripts on ${ip} using Bash..."
 
                 // Step 1: Copy scripts to Windows VM using WinSCP
-                bat """
-                "C:\\Program Files (x86)\\WinSCP\\WinSCP.com" /command ^
-                "open sftp://${ADMIN_USERNAME}:\\"${password}\\"@${ip}/ -hostkey=* -rawsettings AuthKI=0 AuthGSSAPI=0" ^
-                "put ConfigureRemotingForAnsible.ps1 C:/Users/Administrator/Desktop/" ^
-                "put Create_user.ps1 C:/Users/Administrator/Desktop/" ^
+                powershell """
+                & "C:\\Program Files (x86)\\WinSCP\\WinSCP.com" /command `
+                "open sftp://${ADMIN_USERNAME}:${password}@${ip}/ -hostkey=* -rawsettings AuthKI=0 AuthGSSAPI=0" `
+                "put ConfigureRemotingForAnsible.ps1 C:/Users/Administrator/Desktop/" `
+                "put Create_user.ps1 C:/Users/Administrator/Desktop/" `
                 "exit"
                 """
 
-                // Step 2: Execute scripts using SSH with direct password
+               // Step 2: Execute scripts using SSH with direct password
                 bat """
                 "C:\\cygwin64\\bin\\sshpass.exe" -p "${password}" ^
                 "C:\\Windows\\System32\\OpenSSH\\ssh.exe" -o StrictHostKeyChecking=no Administrator@${ip} ^
