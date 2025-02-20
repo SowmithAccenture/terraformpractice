@@ -114,12 +114,12 @@ pipeline {
                 bat """
                 set "SSHPASS=${password}" ^&^&
                 "C:\\cygwin64\\bin\\sshpass.exe" -e ^
-                "C:\\cygwin64\\bin\\ssh.exe" -o StrictHostKeyChecking=no ${ADMIN_USERNAME}@${ip} ^
+                "C:\\Windows\\System32\\OpenSSH\\ssh.exe" -o StrictHostKeyChecking=no ${ADMIN_USERNAME}@${ip} ^
                 "powershell -ExecutionPolicy Bypass -NoProfile -NonInteractive -File C:/Users/Administrator/Desktop/ConfigureRemotingForAnsible.ps1; Exit"
 
                 set "SSHPASS=${password}" ^&^&
                 "C:\\cygwin64\\bin\\sshpass.exe" -e ^
-                "C:\\cygwin64\\bin\\ssh.exe" -o StrictHostKeyChecking=no ${ADMIN_USERNAME}@${ip} ^
+                "C:\\Windows\\System32\\OpenSSH\\ssh.exe" -o StrictHostKeyChecking=no ${ADMIN_USERNAME}@${ip} ^
                 "powershell -ExecutionPolicy Bypass -NoProfile -NonInteractive -File C:/Users/Administrator/Desktop/Create_user.ps1; Exit"
                 """
 
