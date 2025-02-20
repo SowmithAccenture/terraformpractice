@@ -112,12 +112,12 @@ pipeline {
 
                // Step 2: Execute scripts using SSH with SSHPASS
                 bat """
-                set SSHPASS='${password}' & ^
+                set "SSHPASS=${password}" & ^
                 "C:\\cygwin64\\bin\\sshpass.exe" -e ^
                 "C:\\Windows\\System32\\OpenSSH\\ssh.exe" -o StrictHostKeyChecking=no Administrator@${ip} ^
                 "powershell -ExecutionPolicy Bypass -NoProfile -NonInteractive -File C:/Users/Administrator/Desktop/ConfigureRemotingForAnsible.ps1; Exit"
 
-                set SSHPASS='${password}' & ^
+                set "SSHPASS=${password}" & ^
                 "C:\\cygwin64\\bin\\sshpass.exe" -e ^
                 "C:\\Windows\\System32\\OpenSSH\\ssh.exe" -o StrictHostKeyChecking=no Administrator@${ip} ^
                 "powershell -ExecutionPolicy Bypass -NoProfile -NonInteractive -File C:/Users/Administrator/Desktop/Create_user.ps1; Exit"
