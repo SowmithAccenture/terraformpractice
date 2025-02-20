@@ -96,8 +96,8 @@ pipeline {
     steps {
         script {
             def GIT_BASH = "\"C:\\Program Files\\Git\\bin\\bash.exe\""
-            def SSHPASS_PATH = "/c/cygwin64/bin/sshpass"
-            def SSH_PATH = "/c/Windows/System32/OpenSSH/ssh"
+            def SSHPASS_PATH = "/c/cygwin64/bin/sshpass.exe"
+            def SSH_PATH = "/c/Windows/System32/OpenSSH/ssh.exe"
             def passwordEntries = readFile("${WORKSPACE}\\decrypted_passwords.txt").trim().split('\n')
 
             for (entry in passwordEntries) {
