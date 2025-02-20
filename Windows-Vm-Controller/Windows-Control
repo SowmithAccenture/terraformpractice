@@ -110,19 +110,19 @@ pipeline {
                 "exit"
                 """
 
-               // Step 2: Execute scripts using SSH with SSHPASS
-                bat """
-                set SSHPASS="${password}" && ^
-                "C:\\cygwin64\\bin\\sshpass.exe" -e ^
-                "C:\\Windows\\System32\\OpenSSH\\ssh.exe" -o StrictHostKeyChecking=no Administrator@${ip} ^
+                // Step 2: Execute scripts using SSH with SSHPASS in Git Bash
+                sh """
+                "C:\\Program Files\\Git\\bin\\bash.exe" -c '
+                /c/cygwin64/bin/sshpass -p "${password}" \\
+                /c/Windows/System32/OpenSSH/ssh -o StrictHostKeyChecking=no Administrator@${ip} \\
                 "powershell -ExecutionPolicy Bypass -NoProfile -NonInteractive -File C:/Users/Administrator/Desktop/ConfigureRemotingForAnsible.ps1; Exit"
 
-                set SSHPASS="${password}" && ^
-                "C:\\cygwin64\\bin\\sshpass.exe" -e ^
-                "C:\\Windows\\System32\\OpenSSH\\ssh.exe" -o StrictHostKeyChecking=no Administrator@${ip} ^
+                /c/cygwin64/bin/sshpass -p "${password}" \\
+                /c/Windows/System32/OpenSSH/ssh -o StrictHostKeyChecking=no Administrator@${ip} \\
                 "powershell -ExecutionPolicy Bypass -NoProfile -NonInteractive -File C:/Users/Administrator/Desktop/Create_user.ps1; Exit"
+                '
                 """
-
+                
                 echo "Scripts executed successfully on ${ip}!" 
                 
             }
