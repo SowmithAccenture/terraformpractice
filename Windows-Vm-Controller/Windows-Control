@@ -113,12 +113,18 @@ pipeline {
                 "exit"
                 """
 
+
                  // Step 2: Execute scripts using SSH with SSHPASS via Git Bash
                 bat """
+                ${GIT_BASH} -c 'dir ${SSH_PATH}'
+                
+                ${GIT_BASH} -c 'dir ${SSHPASS_PATH}'
+                
+                ${GIT_BASH} -c 'dir C:\\Users\\Administrator\\Desktop\\Create_user.ps1'
                 ${GIT_BASH} -c '
-                ${SSHPASS_PATH} -p "${password}" ${SSH_PATH} -o StrictHostKeyChecking=no Administrator@${ip} "powershell -ExecutionPolicy Bypass -NoProfile -NonInteractive -File \\"C:\\Users\\Administrator\\Desktop\\ConfigureRemotingForAnsible.ps1\\""
+                ${SSHPASS_PATH} -p "${password}" ${SSH_PATH} -o StrictHostKeyChecking=no Administrator@${ip} "powershell -ExecutionPolicy Bypass -NoProfile -NonInteractive -File "C:\\Users\\Administrator\\Desktop\\ConfigureRemotingForAnsible.ps1""
 
-                ${SSHPASS_PATH} -p "${password}" ${SSH_PATH} -o StrictHostKeyChecking=no Administrator@${ip} "powershell -ExecutionPolicy Bypass -NoProfile -NonInteractive -File \\"C:\\Users\\Administrator\\Desktop\\Create_user.ps1\\""
+                ${SSHPASS_PATH} -p "${password}" ${SSH_PATH} -o StrictHostKeyChecking=no Administrator@${ip} "powershell -ExecutionPolicy Bypass -NoProfile -NonInteractive -File "C:\\Users\\Administrator\\Desktop\\Create_user.ps1""
                 '
                 """
                 echo "Scripts executed successfully on ${ip}!"
