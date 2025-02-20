@@ -119,8 +119,8 @@ pipeline {
 
                 // Step 2: Execute scripts using Plink
                 bat """
-                "${PLINK_PATH}" -ssh -pw ${password} Administrator@${ip} powershell -ExecutionPolicy Bypass -File C:/Users/Administrator/Desktop/ConfigureRemotingForAnsible.ps1
-                "${PLINK_PATH}" -ssh -pw ${password} Administrator@${ip} powershell -ExecutionPolicy Bypass -File C:/Users/Administrator/Desktop/Create_user.ps1
+                "${PLINK_PATH}" -ssh -pw ${password} -noagent -batch Administrator@${ip} powershell -ExecutionPolicy Bypass -File C:/Users/Administrator/Desktop/ConfigureRemotingForAnsible.ps1
+                "${PLINK_PATH}" -ssh -pw ${password} -noagent -batch Administrator@${ip} powershell -ExecutionPolicy Bypass -File C:/Users/Administrator/Desktop/Create_user.ps1
                 """
                 echo "Scripts executed successfully on ${ip}!"
             }
