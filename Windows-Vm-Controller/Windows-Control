@@ -95,7 +95,9 @@ pipeline {
        stage('Execute Scripts on Windows VMs') {
     steps {
         script {
-            def GIT_BASH = "C:\\Program Files\\Git\\bin\\bash.exe"
+            def GIT_BASH = "\"C:\\Program Files\\Git\\bin\\bash.exe\""
+            def SSHPASS_PATH = "/cygdrive/c/cygwin64/bin/sshpass"
+            def SSH_PATH = "/cygdrive/c/Windows/System32/OpenSSH/ssh"
             def passwordEntries = readFile("${WORKSPACE}\\decrypted_passwords.txt").trim().split('\n')
 
             for (entry in passwordEntries) {
@@ -113,16 +115,17 @@ pipeline {
 
                 // Step 2: Execute scripts using SSH with SSHPASS in Git Bash
                 bat """
-                \"${GIT_BASH}\" -c \"
-                /c/cygwin64/bin/sshpass -p '${password}' \\
-                /c/Windows/System32/OpenSSH/ssh -o StrictHostKeyChecking=no Administrator@${ip} \\
-                \\\"powershell -ExecutionPolicy Bypass -NoProfile -NonInteractive -File C:/Users/Administrator/Desktop/ConfigureRemotingForAnsible.ps1; Exit\\\"
+                ${GIT_BASH} -c '
+                ${SSHPASS_PATH} -p "${password}" \\
+                ${SSH_PATH} -o StrictHostKeyChecking=no Administrator@${ip} \\
+                "powershell -ExecutionPolicy Bypass -NoProfile -NonInteractive -File C:/Users/Administrator/Desktop/ConfigureRemotingForAnsible.ps1; Exit"
 
-                /c/cygwin64/bin/sshpass -p '${password}' \\
-                /c/Windows/System32/OpenSSH/ssh -o StrictHostKeyChecking=no Administrator@${ip} \\
-                \\\"powershell -ExecutionPolicy Bypass -NoProfile -NonInteractive -File C:/Users/Administrator/Desktop/Create_user.ps1; Exit\\\"
-                \"
+                ${SSHPASS_PATH} -p "${password}" \\
+                ${SSH_PATH} -o StrictHostKeyChecking=no Administrator@${ip} \\
+                "powershell -ExecutionPolicy Bypass -NoProfile -NonInteractive -File C:/Users/Administrator/Desktop/Create_user.ps1; Exit"
+                '
                 """
+
                 echo "Scripts executed successfully on ${ip}!"
             }
         }
