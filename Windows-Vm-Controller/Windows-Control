@@ -113,7 +113,7 @@ pipeline {
                 // Step 2: Test SSH connectivity
                 bat """
                 "C:\\cygwin64\\bin\\sshpass.exe" -p "${password}" ^
-                "C:\\Windows\\System32\\OpenSSH\\ssh.exe" -tt -o StrictHostKeyChecking=no Administrator@${ip} ^
+                "C:\\Windows\\System32\\OpenSSH\\ssh.exe" -vvv -o StrictHostKeyChecking=no Administrator@${ip} ^
                 "whoami"
                 """
                 
