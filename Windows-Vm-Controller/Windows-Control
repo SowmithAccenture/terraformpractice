@@ -110,28 +110,21 @@ pipeline {
                 "exit"
                 """
 
-                // Step 2: Test SSH connectivity
+                // Step 2: Execute scripts using SSH with SSHPASS
                 bat """
-                "C:\\cygwin64\\bin\\sshpass.exe" -p "${password}" ^
-                "C:\\Windows\\System32\\OpenSSH\\ssh.exe" -vvv -o StrictHostKeyChecking=no Administrator@${ip} ^
-                "whoami"
+                set SSHPASS='${password}' & ^
+                "C:\\cygwin64\\bin\\sshpass.exe" -e ^
+                "C:\\Windows\\System32\\OpenSSH\\ssh.exe" -o StrictHostKeyChecking=no Administrator@${ip} ^
+                "powershell -ExecutionPolicy Bypass -NoProfile -NonInteractive -File C:/Users/Administrator/Desktop/ConfigureRemotingForAnsible.ps1; Exit"
+
+                set SSHPASS='${password}' & ^
+                "C:\\cygwin64\\bin\\sshpass.exe" -e ^
+                "C:\\Windows\\System32\\OpenSSH\\ssh.exe" -o StrictHostKeyChecking=no Administrator@${ip} ^
+                "powershell -ExecutionPolicy Bypass -NoProfile -NonInteractive -File C:/Users/Administrator/Desktop/Create_user.ps1; Exit"
                 """
+
+                echo "Scripts executed successfully on ${ip}!" 
                 
-                // Step 3: Execute ConfigureRemotingForAnsible.ps1 script
-                bat """
-                "C:\\cygwin64\\bin\\sshpass.exe" -p "${password}" ^
-                "C:\\Windows\\System32\\OpenSSH\\ssh.exe" -vvv -o StrictHostKeyChecking=no Administrator@${ip} ^
-                "nohup powershell -ExecutionPolicy Bypass -NoProfile -NonInteractive -Command \\"Start-Process -FilePath 'powershell' -ArgumentList '-ExecutionPolicy Bypass -File C:/Users/Administrator/Desktop/ConfigureRemotingForAnsible.ps1' -Verb RunAs\\""
-                """
-
-                // Step 4: Execute Create_user.ps1 script
-                bat """
-                "C:\\cygwin64\\bin\\sshpass.exe" -p "${password}" ^
-                "C:\\Windows\\System32\\OpenSSH\\ssh.exe" -vvv -o StrictHostKeyChecking=no Administrator@${ip} ^
-                "nohup powershell -ExecutionPolicy Bypass -NoProfile -NonInteractive -Command \\"Start-Process -FilePath 'powershell' -ArgumentList '-ExecutionPolicy Bypass -File C:/Users/Administrator/Desktop/Create_user.ps1' -Verb RunAs\\""
-                """
-
-                echo "Scripts executed successfully on ${ip}!"
             }
         }
     }
